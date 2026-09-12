@@ -105,6 +105,10 @@
                 <button id="btn-browse" class="ghost" type="button">Browse files</button>
                 <button id="btn-browse-folder" class="ghost" type="button">Browse folder</button>
               </div>
+              <label class="smart-toggle" title="Show a preview of exactly what will be installed, with protected-file and conflict checks, before anything is copied.">
+                <input type="checkbox" id="smart-toggle" />
+                Preview before installing (Smart Install)
+              </label>
             </div>
           </div>
 
@@ -118,6 +122,19 @@
             </div>
             <div id="mod-list" class="mod-list">
               <p class="empty">Nothing installed yet. Drop an archive to start.</p>
+            </div>
+          </section>
+
+          <section class="card mods-card smart-card">
+            <div class="mods-head">
+              <div>
+                <p class="section-label">Smart Install</p>
+                <p class="mods-sub">Individual plugins and scripts installed with a preview, automatic backups, and safe one-click removal.</p>
+              </div>
+              <span id="smart-count" class="count">0</span>
+            </div>
+            <div id="smart-mod-list" class="mod-list">
+              <p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>
             </div>
           </section>
 

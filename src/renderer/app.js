@@ -19,10 +19,14 @@ const ui = {
   healthTitle: $("label-health-title"),
   healthDetail: $("label-health"),
   lampHealth: $("lamp-health"),
+  smartToggle: $("smart-toggle"),
+  smartMods: $("smart-mod-list"),
+  smartCount: $("smart-count"),
 };
 
 let state = null;
 let busy = false;
+let smartMods = [];
 
 function shortPath(value) {
   if (!value) return "Not set";
@@ -394,6 +398,176 @@ function showPlan(plan) {
   };
 }
 
+function renderSmartCard(mod) {
+  const when = new Date(mod.installedAt).toLocaleString();
+  const conf = Math.round((mod.confidence || 0) * 100);
+  const skipped = (mod.skipped || []).length;
+  const files = (mod.files || []).length;
+  return `
+    <article class="mod ${mod.enabled ? "" : "disabled"}" data-smart-id="${escapeHtml(mod.id)}">
+      <i class="lamp ${mod.enabled ? "ok" : "warn"}"></i>
+      <div>
+        <h3>${escapeHtml(mod.name)}</h3>
+        <p>${escapeHtml(mod.type || "Mod")} · ${conf}% · ${files} files${skipped ? ` · ${skipped} skipped` : ""} · ${when}</p>
+      </div>
+      <div class="mod-actions">
+        <button class="ghost" data-sact="toggle" type="button">${mod.enabled ? "Disable" : "Enable"}</button>
+        <button class="ghost" data-sact="remove" type="button">Remove</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSmartMods() {
+  if (!ui.smartMods) return;
+  if (ui.smartCount) ui.smartCount.textContent = String(smartMods.length);
+  ui.smartMods.innerHTML = smartMods.length
+    ? smartMods.map(renderSmartCard).join("")
+    : `<p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>`;
+}
+
+async function refreshSmart() {
+  try {
+    smartMods = await window.tactix.smartList();
+  } catch {
+    smartMods = [];
+  }
+  renderSmartMods();
+}
+
+function severityMeta(sev) {
+  switch (sev) {
+    case "BLOCKED":
+      return { cls: "bad", text: "Blocked" };
+    case "HIGH_RISK":
+      return { cls: "bad", text: "High risk" };
+    case "WARNING":
+      return { cls: "warn", text: "Warnings" };
+    case "SAFE_REPLACEMENT":
+      return { cls: "ok", text: "Safe" };
+    default:
+      return { cls: "ok", text: "Clean" };
+  }
+}
+
+function planList(items) {
+  if (!items.length) return `<p class="empty">None.</p>`;
+  const max = 40;
+  const rows = items
+    .slice(0, max)
+    .map((f) => {
+      const reason = f.reason ? ` <span class="muted">— ${escapeHtml(f.reason)}</span>` : "";
+      return `<li><code>${escapeHtml(f.destination)}</code><span class="badge">${escapeHtml(f.category)}</span>${reason}</li>`;
+    })
+    .join("");
+  const more = items.length > max ? `<li class="muted">+${items.length - max} more…</li>` : "";
+  return `<ul class="plan-list">${rows}${more}</ul>`;
+}
+
+// Shows the Smart Install preview. Resolves true if the user chooses Install.
+function confirmSmartPreview(preview) {
+  return new Promise((resolve) => {
+    const files = preview.files || [];
+    const adds = files.filter((f) => f.action === "add");
+    const reps = files.filter((f) => f.action === "replace");
+    const skips = files.filter((f) => f.action === "skip");
+    const sev = (preview.conflicts && preview.conflicts.severity) || "NONE";
+    const meta = severityMeta(sev);
+    const blocked = sev === "BLOCKED";
+    const conf = Math.round((preview.confidence || 0) * 100);
+    const execs = preview.executables || [];
+    const conflictItems = ((preview.conflicts && preview.conflicts.items) || []).filter(
+      (i) => i.level !== "NONE" && i.level !== "SAFE_REPLACEMENT"
+    );
+
+    showOverlay(
+      `
+      <h2>Smart Install — ${escapeHtml(preview.name)}</h2>
+      <p>
+        Detected <strong>${escapeHtml(preview.type)}</strong> ·
+        ${conf}% confidence · <span class="sev ${meta.cls}">${meta.text}</span><br />
+        <span class="muted">${escapeHtml(preview.modeLabel || "")}</span>
+      </p>
+      <div class="badges">
+        <span class="badge">${adds.length} new</span>
+        <span class="badge">${reps.length} replace</span>
+        <span class="badge">${skips.length} skipped</span>
+      </div>
+      <p class="muted">Everything installs into the LSPDFR folder only. Protected launch files are never overwritten.</p>
+      ${
+        conflictItems.length
+          ? `<h3>Attention</h3><ul class="check-list">${conflictItems
+              .map(
+                (i) =>
+                  `<li><i class="lamp ${
+                    i.level === "BLOCKED" || i.level === "HIGH_RISK" ? "bad" : "warn"
+                  }"></i><div><small>${escapeHtml(i.message)}</small></div></li>`
+              )
+              .join("")}</ul>`
+          : ""
+      }
+      ${
+        execs.length
+          ? `<h3>Executables — never run automatically</h3><ul class="warnings">${execs
+              .map((e) => `<li>${escapeHtml(e)}</li>`)
+              .join("")}</ul>`
+          : ""
+      }
+      <h3>New files (${adds.length})</h3>
+      ${planList(adds)}
+      ${reps.length ? `<h3>Replaces (${reps.length}) — originals backed up</h3>${planList(reps)}` : ""}
+      ${skips.length ? `<h3>Skipped to protect the launch (${skips.length})</h3>${planList(skips)}` : ""}
+      <div class="dialog-actions">
+        <button id="smart-install" class="primary" type="button" ${blocked ? "disabled" : ""}>${
+          blocked ? "Blocked" : "Install"
+        }</button>
+        <button id="smart-cancel" class="ghost" type="button">Cancel</button>
+      </div>
+    `,
+      true
+    );
+
+    $("smart-cancel").onclick = () => resolve(false);
+    const install = $("smart-install");
+    if (install && !blocked) install.onclick = () => resolve(true);
+  });
+}
+
+// Runs the Smart Install preview → commit flow for each source in turn.
+async function smartIngest(sources) {
+  for (const source of sources) {
+    const name = source.split(/[/\\]/).pop();
+    let preview;
+    try {
+      addLog({ level: "info", message: `Analyzing ${name} (Smart Install)…` });
+      preview = await window.tactix.smartAnalyze(source);
+    } catch (error) {
+      addLog({ level: "error", message: error.message });
+      continue;
+    }
+
+    const go = await confirmSmartPreview(preview);
+    if (!go) {
+      await window.tactix.smartCancel(preview.id).catch(() => {});
+      hideOverlay();
+      addLog({ level: "info", message: `Cancelled ${preview.name}.` });
+      continue;
+    }
+
+    try {
+      showProgress("Installing", preview.name);
+      const result = await window.tactix.smartCommit(preview.id);
+      renderState(result.state);
+      await refreshSmart();
+      hideOverlay();
+      addLog({ level: "ok", message: `Smart-installed ${preview.name}.` });
+    } catch (error) {
+      addLog({ level: "error", message: error.message });
+      hideOverlay();
+    }
+  }
+}
+
 function pathsFromDataTransfer(data) {
   if (!data) return [];
   const fromFiles = [...(data.files || [])]
@@ -453,6 +627,11 @@ async function ingestFiles(filePaths) {
   try {
     setBusy(true);
     if (!(await ensureReady())) return;
+
+    if (ui.smartToggle && ui.smartToggle.checked) {
+      await smartIngest(sources);
+      return;
+    }
 
     let lastTests = null;
     for (const source of sources) {
@@ -705,11 +884,37 @@ ui.mods.addEventListener("click", async (event) => {
   }
 });
 
+if (ui.smartMods) {
+  ui.smartMods.addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-sact]");
+    const card = event.target.closest("[data-smart-id]");
+    if (!button || !card) return;
+    const id = card.dataset.smartId;
+    const mod = smartMods.find((item) => item.id === id);
+    try {
+      setBusy(true);
+      if (button.dataset.sact === "remove") {
+        const result = await window.tactix.smartUninstall(id);
+        renderState(result.state);
+      } else if (mod) {
+        const result = await window.tactix.smartSetEnabled(id, !mod.enabled);
+        renderState(result.state);
+      }
+      await refreshSmart();
+    } catch (error) {
+      addLog({ level: "error", message: error.message });
+    } finally {
+      setBusy(false);
+    }
+  });
+}
+
 window.tactix.onLog(addLog);
 window.tactix.onProgress(updateProgress);
 
 refresh().then(async () => {
   addLog({ level: "info", message: "GTA 5 Mod Manager ready. GTA V Enhanced only." });
+  refreshSmart();
   if (!state?.config.officialPath || !state?.game.sandboxReady) {
     const found = await window.tactix.detectGame();
     setupForm(found.found ? found : {});
