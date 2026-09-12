@@ -31,6 +31,37 @@ const ui = {
   profileDetail: $("label-profile-detail"),
 };
 
+const THEME_KEY = "tactix.theme";
+
+function normalizeTheme(value) {
+  return value === "bright" ? "bright" : "dark";
+}
+
+function storedTheme() {
+  try {
+    return window.localStorage.getItem(THEME_KEY);
+  } catch {
+    return "";
+  }
+}
+
+function applyTheme(theme, persist = false) {
+  const next = normalizeTheme(theme);
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    window.localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* ignore quota / private mode */
+  }
+  const darkBtn = $("theme-dark");
+  const brightBtn = $("theme-bright");
+  if (darkBtn) darkBtn.classList.toggle("is-active", next === "dark");
+  if (brightBtn) brightBtn.classList.toggle("is-active", next === "bright");
+  if (persist) window.tactix.settingsSave({ theme: next }).catch(() => {});
+}
+
+applyTheme(storedTheme() || document.documentElement.getAttribute("data-theme") || "dark");
+
 let state = null;
 let busy = false;
 let smartMods = [];
@@ -237,6 +268,9 @@ function renderState(next) {
   renderRetestBanner(next.pendingRetest || (next.lastSession && next.lastSession.pendingRetest));
   renderActiveProfile(next.profile);
   applyPreviewDefault(next.config);
+  const remembered = storedTheme();
+  if (remembered) applyTheme(remembered);
+  else if (cfg && cfg.theme) applyTheme(cfg.theme);
   renderDashboardLite(next);
 }
 
@@ -2363,6 +2397,11 @@ async function showPrefs() {
     <p><label>Session retention <input id="set-sess" type="number" min="5" max="200" value="${Number(cfg.sessionRetention) || 40}" /></label></p>
     <p><label>Automatic snapshot retention <input id="set-auto" type="number" min="5" max="40" value="${Number(cfg.autoSnapshotRetention) || 15}" /></label></p>
     <p><label><input id="set-last" type="checkbox" ${cfg.openLastPage ? "checked" : ""} /> Open last active page</label></p>
+    <p class="section-label">Appearance</p>
+    <div class="theme-switch" role="group" aria-label="Appearance">
+      <button id="set-theme-dark" type="button">Dark</button>
+      <button id="set-theme-bright" type="button">Bright</button>
+    </div>
     <p><label><input id="set-dev" type="checkbox" ${cfg.developerMode ? "checked" : ""} /> Developer mode</label></p>
     <div class="dialog-actions">
       <button id="set-save" type="button">Save</button>
@@ -2370,6 +2409,22 @@ async function showPrefs() {
     </div>
   `, true);
   $("set-close").onclick = hideOverlay;
+  let prefTheme = normalizeTheme(cfg.theme || storedTheme());
+  const markPrefTheme = () => {
+    $("set-theme-dark").classList.toggle("is-active", prefTheme === "dark");
+    $("set-theme-bright").classList.toggle("is-active", prefTheme === "bright");
+  };
+  markPrefTheme();
+  $("set-theme-dark").onclick = () => {
+    prefTheme = "dark";
+    applyTheme(prefTheme, true);
+    markPrefTheme();
+  };
+  $("set-theme-bright").onclick = () => {
+    prefTheme = "bright";
+    applyTheme(prefTheme, true);
+    markPrefTheme();
+  };
   $("set-save").onclick = async () => {
     await window.tactix.settingsSave({
       defaultProfileId: $("set-profile").value,
@@ -2380,6 +2435,7 @@ async function showPrefs() {
       autoSnapshotRetention: Number($("set-auto").value),
       openLastPage: $("set-last").checked,
       developerMode: $("set-dev").checked,
+      theme: prefTheme,
     });
     hideOverlay();
   };
@@ -2397,6 +2453,8 @@ document.querySelectorAll(".nav-btn").forEach((button) => {
   };
 });
 
+if ($("theme-dark")) $("theme-dark").onclick = () => applyTheme("dark", true);
+if ($("theme-bright")) $("theme-bright").onclick = () => applyTheme("bright", true);
 if ($("btn-troubleshoot")) $("btn-troubleshoot").onclick = () => showTroubleshoot().catch((error) => addLog({ level: "error", message: userError(error) }));
 if ($("btn-dash-tests")) $("btn-dash-tests").onclick = () => $("btn-tests").click();
 if ($("mod-search")) $("mod-search").oninput = () => renderSmartMods();

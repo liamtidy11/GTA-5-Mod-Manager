@@ -17,6 +17,7 @@ const DEFAULTS = {
   openLastPage: false,
   lastPage: "dashboard",
   developerMode: false,
+  theme: "dark",
 };
 
 function configPath(userData) {

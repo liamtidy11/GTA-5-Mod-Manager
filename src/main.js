@@ -238,7 +238,7 @@ function createWindow() {
     minWidth: 1080,
     minHeight: 700,
     backgroundColor: "#0B0D10",
-    title: "GTA 5 Mod Manager",
+    title: "GTA V Mod Manager",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -1242,10 +1242,14 @@ ipcMain.handle("settings:save", async (_event, patch = {}) => {
     "openLastPage",
     "lastPage",
     "developerMode",
+    "theme",
   ];
   const clean = {};
   for (const key of allowed) {
     if (Object.prototype.hasOwnProperty.call(patch, key)) clean[key] = patch[key];
+  }
+  if (Object.prototype.hasOwnProperty.call(clean, "theme")) {
+    clean.theme = clean.theme === "bright" ? "bright" : "dark";
   }
   const saved = config.save(userData(), clean);
   return { config: saved, state: snapshot() };

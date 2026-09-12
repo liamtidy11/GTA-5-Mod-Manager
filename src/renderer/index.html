@@ -1,247 +1,249 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:"
     />
-    <title>GTA 5 Mod Manager</title>
+    <title>GTA V Mod Manager</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app">
       <header class="topbar">
         <div class="brand">
-          <div class="mark" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </div>
+          <div class="mark" aria-hidden="true">V</div>
           <div>
-            <p class="eyebrow">Duty / Online split</p>
-            <h1>GTA 5 Mod Manager</h1>
+            <p class="eyebrow">Personal</p>
+            <h1>GTA V Mod Manager</h1>
           </div>
         </div>
         <div class="top-meta">
-          <span class="pill">GTA V Enhanced only</span>
+          <span class="pill">Enhanced</span>
+          <div class="theme-switch" role="group" aria-label="Appearance">
+            <button id="theme-dark" type="button">Dark</button>
+            <button id="theme-bright" type="button">Bright</button>
+          </div>
           <button id="btn-settings" class="ghost" type="button" title="Folders and first-time setup">Setup</button>
         </div>
       </header>
       <nav class="app-nav" aria-label="Main">
-        <button class="nav-btn is-active" data-page="dashboard" type="button">Dashboard</button>
-        <button class="nav-btn" data-page="mods" type="button">Mods</button>
-        <button class="nav-btn" data-page="profiles" type="button">Profiles</button>
-        <button class="nav-btn" data-page="recovery" type="button">Recovery</button>
-        <button class="nav-btn" data-page="sessions" type="button">Launch History</button>
-        <button class="nav-btn" data-page="diagnostics" type="button">Diagnostics</button>
-        <button class="nav-btn" data-page="prefs" type="button">Settings</button>
-      </nav>
+          <button class="nav-btn is-active" data-page="dashboard" type="button">Dashboard</button>
+          <button class="nav-btn" data-page="mods" type="button">Mods</button>
+          <button class="nav-btn" data-page="profiles" type="button">Profiles</button>
+          <button class="nav-btn" data-page="recovery" type="button">Recovery</button>
+          <button class="nav-btn" data-page="sessions" type="button">Launch History</button>
+          <button class="nav-btn" data-page="diagnostics" type="button">Diagnostics</button>
+          <button class="nav-btn" data-page="prefs" type="button">Settings</button>
+        </nav>
 
-      <main class="layout">
-        <aside class="rail">
-          <section class="card launch-card">
-            <p class="section-label">Launch</p>
-            <button id="btn-lspdfr" class="launch duty" type="button">
-              <strong>Play LSPDFR</strong>
-              <span>Rage Plugin Hook · Story Mode</span>
-            </button>
-            <button id="btn-online" class="launch online" type="button">
-              <strong>Play Online</strong>
-              <span>Clean Enhanced · no hooks</span>
-            </button>
-            <p class="fineprint">
-              LSPDFR never loads into GTA Online. If Steam asks about custom arguments, click Play.
-            </p>
-          </section>
-
-          <section class="card">
-            <p class="section-label">Function test</p>
-            <div class="health-line">
-              <i id="lamp-health" class="lamp"></i>
-              <div>
-                <strong id="label-health-title">Not run yet</strong>
-                <small id="label-health">Install a pack, then test before you launch.</small>
-              </div>
-            </div>
-            <div class="row-actions">
-              <button id="btn-tests" class="ghost" type="button">Run tests</button>
-              <button id="btn-crashes" class="ghost" type="button">Crash reports</button>
-            </div>
-          </section>
-
-          <section class="card">
-            <p class="section-label">Last LSPDFR session</p>
-            <div class="health-line">
-              <i id="lamp-session" class="lamp"></i>
-              <div>
-                <strong id="label-session-result">No session yet</strong>
-                <small id="label-session-detail">Launch Duty to start recording evidence.</small>
-              </div>
-            </div>
-            <div id="retest-banner" class="retest-banner hidden"></div>
-            <div class="row-actions">
-              <button id="btn-sessions" class="ghost" type="button">Launch History</button>
-            </div>
-          </section>
-
-          <section class="card">
-            <p class="section-label">Active profile</p>
-            <div class="health-line">
-              <i id="lamp-profile" class="lamp"></i>
-              <div>
-                <strong id="label-profile-name">No profile yet</strong>
-                <small id="label-profile-detail">Profiles remember a Duty setup you can return to.</small>
-              </div>
-            </div>
-            <div class="row-actions">
-              <button id="btn-profiles" class="ghost" type="button">Profiles</button>
-              <button id="btn-recovery" class="ghost" type="button">Recovery</button>
-              <button id="btn-known-good" class="ghost" type="button">Restore Known-Good Setup</button>
-            </div>
-          </section>
-
-          <section class="card">
-            <p class="section-label">Status</p>
-            <ul class="status-list">
-              <li>
-                <i id="lamp-official" class="lamp"></i>
-                <div>
-                  <strong>Online folder</strong>
-                  <small id="label-official">Not set</small>
-                </div>
-              </li>
-              <li>
-                <i id="lamp-sandbox" class="lamp"></i>
-                <div>
-                  <strong>LSPDFR folder</strong>
-                  <small id="label-sandbox">Not set</small>
-                </div>
-              </li>
-              <li>
-                <i id="lamp-rph" class="lamp"></i>
-                <div>
-                  <strong>Rage Plugin Hook</strong>
-                  <small id="label-rph">Not installed</small>
-                </div>
-              </li>
-            </ul>
-            <div class="row-actions">
-              <button id="btn-open-official" class="ghost" type="button">Open Online</button>
-              <button id="btn-open-sandbox" class="ghost" type="button">Open LSPDFR</button>
-            </div>
-          </section>
-        </aside>
-
-        <section class="workspace">
-          <section id="page-dashboard" class="dash-page">
-            <section class="card dash-grid">
-              <div>
-                <p class="section-label">Duty status</p>
-                <div class="health-line">
-                  <i id="dash-duty-lamp" class="lamp"></i>
-                  <div>
-                    <strong id="dash-duty-title">Not checked</strong>
-                    <small id="dash-duty-detail">Open the app after setup to see launch health.</small>
-                  </div>
-                </div>
-                <ul id="dash-duty-reasons" class="dash-reasons"></ul>
-              </div>
-              <div>
-                <p class="section-label">Active profile</p>
-                <strong id="dash-profile-name">None</strong>
-                <small id="dash-profile-detail">Create a profile from the current Duty setup.</small>
-              </div>
-              <div>
-                <p class="section-label">Last session</p>
-                <strong id="dash-session-title">No session yet</strong>
-                <small id="dash-session-detail">Launch Duty to start recording evidence.</small>
-              </div>
-              <div>
-                <p class="section-label">Mods</p>
-                <strong id="dash-mod-counts">0 enabled</strong>
-                <small id="dash-mod-health">No managed mods yet.</small>
-              </div>
+        <main class="layout">
+          <aside class="rail">
+            <section class="card launch-card">
+              <p class="section-label">Launch</p>
+              <button id="btn-lspdfr" class="launch duty" type="button">
+                <strong>Play LSPDFR</strong>
+                <span>Rage Plugin Hook · Story Mode</span>
+              </button>
+              <button id="btn-online" class="launch online" type="button">
+                <strong>Play Online</strong>
+                <span>Clean Enhanced · no hooks</span>
+              </button>
+              <p class="fineprint">
+                LSPDFR never loads into GTA Online. If Steam asks about custom arguments, click Play.
+              </p>
             </section>
+
             <section class="card">
-              <p class="section-label">Attention</p>
-              <ul id="dash-alerts" class="dash-alerts"><li class="muted">Nothing needs attention.</li></ul>
+              <p class="section-label">Function test</p>
+              <div class="health-line">
+                <i id="lamp-health" class="lamp"></i>
+                <div>
+                  <strong id="label-health-title">Not run yet</strong>
+                  <small id="label-health">Install a pack, then test before you launch.</small>
+                </div>
+              </div>
               <div class="row-actions">
-                <button id="btn-troubleshoot" type="button">Troubleshoot Duty</button>
-                <button id="btn-dash-tests" class="ghost" type="button">Run tests</button>
+                <button id="btn-tests" class="ghost" type="button">Run tests</button>
+                <button id="btn-crashes" class="ghost" type="button">Crash reports</button>
               </div>
             </section>
+
             <section class="card">
-              <p class="section-label">Recent changes</p>
-              <ul id="dash-recent" class="dash-alerts"><li class="muted">No recent manager activity.</li></ul>
-              <p class="fineprint"><span id="dash-app-health">Mod Manager Health: Unknown</span></p>
+              <p class="section-label">Last LSPDFR session</p>
+              <div class="health-line">
+                <i id="lamp-session" class="lamp"></i>
+                <div>
+                  <strong id="label-session-result">No session yet</strong>
+                  <small id="label-session-detail">Launch Duty to start recording evidence.</small>
+                </div>
+              </div>
+              <div id="retest-banner" class="retest-banner hidden"></div>
+              <div class="row-actions">
+                <button id="btn-sessions" class="ghost" type="button">Launch History</button>
+              </div>
             </section>
-          </section>
 
-          <div id="page-mods" class="hidden">
-          <div
-            id="dropzone"
-            class="dropzone"
-            tabindex="0"
-          >
-            <div>
-              <p class="drop-kicker">Hands-off install</p>
-              <h2>Drop LSPDFR here</h2>
-              <p>The app unpacks it, installs it, turns BattlEye off, and runs a function test.</p>
-              <div class="row-actions" style="justify-content: center">
-                <button id="btn-browse" class="ghost" type="button">Browse files</button>
-                <button id="btn-browse-folder" class="ghost" type="button">Browse folder</button>
+            <section class="card">
+              <p class="section-label">Active profile</p>
+              <div class="health-line">
+                <i id="lamp-profile" class="lamp"></i>
+                <div>
+                  <strong id="label-profile-name">No profile yet</strong>
+                  <small id="label-profile-detail">Profiles remember a Duty setup you can return to.</small>
+                </div>
               </div>
-              <label class="smart-toggle" title="Show a preview of exactly what will be installed, with protected-file and conflict checks, before anything is copied.">
-                <input type="checkbox" id="smart-toggle" />
-                Preview before installing (Smart Install)
-              </label>
-            </div>
-          </div>
-
-          <section class="card mods-card">
-            <div class="mods-head">
-              <div>
-                <p class="section-label">Installed in LSPDFR folder</p>
-                <p class="mods-sub">Grouped by pack type. Cars, maps, and sounds stay in this folder only.</p>
+              <div class="row-actions">
+                <button id="btn-profiles" class="ghost" type="button">Profiles</button>
+                <button id="btn-recovery" class="ghost" type="button">Recovery</button>
+                <button id="btn-known-good" class="ghost" type="button">Restore Known-Good Setup</button>
               </div>
-              <span id="mod-count" class="count">0</span>
-            </div>
-            <div id="mod-list" class="mod-list">
-              <p class="empty">Nothing installed yet. Drop an archive to start.</p>
-            </div>
-          </section>
+            </section>
 
-          <section class="card mods-card smart-card">
-            <div class="mods-head">
-              <div>
-                <p class="section-label">Smart Install</p>
-                <p class="mods-sub">Individual plugins and scripts installed with a preview, automatic backups, and safe one-click removal.</p>
+            <section class="card">
+              <p class="section-label">Status</p>
+              <ul class="status-list">
+                <li>
+                  <i id="lamp-official" class="lamp"></i>
+                  <div>
+                    <strong>Online folder</strong>
+                    <small id="label-official">Not set</small>
+                  </div>
+                </li>
+                <li>
+                  <i id="lamp-sandbox" class="lamp"></i>
+                  <div>
+                    <strong>LSPDFR folder</strong>
+                    <small id="label-sandbox">Not set</small>
+                  </div>
+                </li>
+                <li>
+                  <i id="lamp-rph" class="lamp"></i>
+                  <div>
+                    <strong>Rage Plugin Hook</strong>
+                    <small id="label-rph">Not installed</small>
+                  </div>
+                </li>
+              </ul>
+              <div class="row-actions">
+                <button id="btn-open-official" class="ghost" type="button">Open Online</button>
+                <button id="btn-open-sandbox" class="ghost" type="button">Open LSPDFR</button>
               </div>
-              <span id="smart-count" class="count">0</span>
-            </div>
-            <div class="mods-toolbar">
-              <label class="sr-only" for="mod-search">Search mods</label>
-              <input id="mod-search" type="search" placeholder="Search name, DLL, alias…" autocomplete="off" />
-              <select id="mod-filter" aria-label="Filter mods">
-                <option value="">All</option>
-                <option value="ENABLED">Enabled</option>
-                <option value="DISABLED">Disabled</option>
-                <option value="WARNING">Warning</option>
-                <option value="BROKEN">Broken</option>
-                <option value="UNKNOWN">Unknown</option>
-              </select>
-            </div>
-            <div id="smart-mod-list" class="mod-list">
-              <p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>
-            </div>
-          </section>
+            </section>
+          </aside>
 
-          <section class="card log-card">
-            <p class="section-label">Activity</p>
-            <ol id="log" class="log"></ol>
+          <section class="workspace">
+            <section id="page-dashboard" class="dash-page">
+              <section class="card dash-grid">
+                <div>
+                  <p class="section-label">Duty status</p>
+                  <div class="health-line">
+                    <i id="dash-duty-lamp" class="lamp"></i>
+                    <div>
+                      <strong id="dash-duty-title">Not checked</strong>
+                      <small id="dash-duty-detail">Open the app after setup to see launch health.</small>
+                    </div>
+                  </div>
+                  <ul id="dash-duty-reasons" class="dash-reasons"></ul>
+                </div>
+                <div>
+                  <p class="section-label">Active profile</p>
+                  <strong id="dash-profile-name">None</strong>
+                  <small id="dash-profile-detail">Create a profile from the current Duty setup.</small>
+                </div>
+                <div>
+                  <p class="section-label">Last session</p>
+                  <strong id="dash-session-title">No session yet</strong>
+                  <small id="dash-session-detail">Launch Duty to start recording evidence.</small>
+                </div>
+                <div>
+                  <p class="section-label">Mods</p>
+                  <strong id="dash-mod-counts">0 enabled</strong>
+                  <small id="dash-mod-health">No managed mods yet.</small>
+                </div>
+              </section>
+              <section class="card">
+                <p class="section-label">Attention</p>
+                <ul id="dash-alerts" class="dash-alerts"><li class="muted">Nothing needs attention.</li></ul>
+                <div class="row-actions">
+                  <button id="btn-troubleshoot" type="button" class="primary">Troubleshoot Duty</button>
+                  <button id="btn-dash-tests" class="ghost" type="button">Run tests</button>
+                </div>
+              </section>
+              <section class="card">
+                <p class="section-label">Recent changes</p>
+                <ul id="dash-recent" class="dash-alerts"><li class="muted">No recent manager activity.</li></ul>
+                <p class="fineprint"><span id="dash-app-health">Mod Manager Health: Unknown</span></p>
+              </section>
+            </section>
+
+            <div id="page-mods" class="hidden">
+              <div
+                id="dropzone"
+                class="dropzone"
+                tabindex="0"
+              >
+                <div>
+                  <p class="drop-kicker">Hands-off install</p>
+                  <h2>Drop LSPDFR here</h2>
+                  <p>The app unpacks it, installs it, turns BattlEye off, and runs a function test.</p>
+                  <div class="row-actions" style="justify-content: center">
+                    <button id="btn-browse" class="ghost" type="button">Browse files</button>
+                    <button id="btn-browse-folder" class="ghost" type="button">Browse folder</button>
+                  </div>
+                  <label class="smart-toggle" title="Show a preview of exactly what will be installed, with protected-file and conflict checks, before anything is copied.">
+                    <input type="checkbox" id="smart-toggle" />
+                    Preview before installing (Smart Install)
+                  </label>
+                </div>
+              </div>
+
+              <section class="card mods-card">
+                <div class="mods-head">
+                  <div>
+                    <p class="section-label">Installed in LSPDFR folder</p>
+                    <p class="mods-sub">Grouped by pack type. Cars, maps, and sounds stay in this folder only.</p>
+                  </div>
+                  <span id="mod-count" class="count">0</span>
+                </div>
+                <div id="mod-list" class="mod-list">
+                  <p class="empty">Nothing installed yet. Drop an archive to start.</p>
+                </div>
+              </section>
+
+              <section class="card mods-card smart-card">
+                <div class="mods-head">
+                  <div>
+                    <p class="section-label">Smart Install</p>
+                    <p class="mods-sub">Individual plugins and scripts installed with a preview, automatic backups, and safe one-click removal.</p>
+                  </div>
+                  <span id="smart-count" class="count">0</span>
+                </div>
+                <div class="mods-toolbar">
+                  <label class="sr-only" for="mod-search">Search mods</label>
+                  <input id="mod-search" type="search" placeholder="Search name, DLL, alias…" autocomplete="off" />
+                  <select id="mod-filter" aria-label="Filter mods">
+                    <option value="">All</option>
+                    <option value="ENABLED">Enabled</option>
+                    <option value="DISABLED">Disabled</option>
+                    <option value="WARNING">Warning</option>
+                    <option value="BROKEN">Broken</option>
+                    <option value="UNKNOWN">Unknown</option>
+                  </select>
+                </div>
+                <div id="smart-mod-list" class="mod-list">
+                  <p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>
+                </div>
+              </section>
+
+              <section class="card log-card">
+                <p class="section-label">Activity</p>
+                <ol id="log" class="log"></ol>
+              </section>
+            </div>
           </section>
-          </div>
-        </section>
-      </main>
+        </main>
     </div>
 
     <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
