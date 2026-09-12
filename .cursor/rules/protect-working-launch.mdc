@@ -1,0 +1,41 @@
+---
+description: Do not break the working GTA Enhanced + LSPDFR launch path
+alwaysApply: true
+---
+
+# Protect the working launch
+
+GTA V Enhanced Story Mode and LSPDFR now load. New features must not change that. After any change to launch, install, file mapping, BattlEye, permissions, or the duty folder layout, run `npm run verify` and fix failures before adding more work.
+
+## Folders
+
+- **Online / official Steam only:** never install mods, RPH, ASI, or LSPDFR here.
+- **Duty sandbox:** `Grand Theft Auto V Enhanced - LSPDFR` is the only place mods and RPH live.
+- Do not merge, swap, or write across these folders.
+
+## Leave these flows alone unless a new log proves they are broken
+
+- `src/services/launcher.js` `launchLspdfr` (repair layout, BattlEye off, RPH ini, materialize exes, elevate RPH)
+- `src/services/installer.js` `repairLspdfrLayout`
+- `src/services/modtypes.js` `RPH_ROOT_DLLS` and DLL remap rules
+- `src/services/battleye.js` and `src/services/permissions.js`
+
+Add new features in new files or UI when possible. Do not rewrite a working launch/install path to “clean it up.”
+
+## Known-good duty layout
+
+- `Plugins\` root may contain only `LSPD First Response.dll`, its `.config`, its `.pdb`, and the `Plugins\LSPDFR\` folder.
+- Support DLLs (`LMS.Common`, `DiscordRpcNet`, `DdsConvert`, `SlimDX`, `EasyHook`, Gwen, Mono.Cecil, …) stay **next to the game exe**, not in `Plugins\`.
+- Never put `LSPD First Response.dll` or `Newtonsoft.Json.dll` in the game root.
+- Never overwrite `XInput1_4.dll` (ASI loader) with the small RPH hook copy.
+- `startup.rphs` must stay `LoadPlugin "LSPD First Response.dll"` — never `ReloadAllPlugins`.
+- `PluginTimeoutThreshold` must stay `60000`. RPH rejects `180000`.
+- F4 is the RPH console (often invisible on Enhanced). Do not “fix” missing LSPDFR by changing F4.
+
+## Do not do
+
+- Drop extra DLLs into `Plugins\` (ReloadAllPlugins will treat them as plugins).
+- Hand-edit Steam launch options (`-skipPatchChecker`, `-launchTitleInFolder`).
+- Kill `RAGEPluginHook` / `GTA5_Enhanced` when restarting Electron if the user is in-game.
+- Put mods in the official Steam folder.
+- Re-add `Newtonsoft.Json.dll` to “help” LSPDFR (it is IL-merged and breaks load).

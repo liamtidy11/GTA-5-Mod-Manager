@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:"
+    />
+    <title>GTA 5 Mod Manager</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <p class="eyebrow">Duty / Online split</p>
+            <h1>GTA 5 Mod Manager</h1>
+          </div>
+        </div>
+        <div class="top-meta">
+          <span class="pill">GTA V Enhanced only</span>
+          <button id="btn-settings" class="ghost" type="button">Setup</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <aside class="rail">
+          <section class="card launch-card">
+            <p class="section-label">Launch</p>
+            <button id="btn-lspdfr" class="launch duty" type="button">
+              <strong>Play LSPDFR</strong>
+              <span>Rage Plugin Hook · Story Mode</span>
+            </button>
+            <button id="btn-online" class="launch online" type="button">
+              <strong>Play Online</strong>
+              <span>Clean Enhanced · no hooks</span>
+            </button>
+            <p class="fineprint">
+              LSPDFR never loads into GTA Online. If Steam asks about custom arguments, click Play.
+            </p>
+          </section>
+
+          <section class="card">
+            <p class="section-label">Function test</p>
+            <div class="health-line">
+              <i id="lamp-health" class="lamp"></i>
+              <div>
+                <strong id="label-health-title">Not run yet</strong>
+                <small id="label-health">Install a pack, then test before you launch.</small>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button id="btn-tests" class="ghost" type="button">Run tests</button>
+              <button id="btn-crashes" class="ghost" type="button">Crash reports</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="section-label">Status</p>
+            <ul class="status-list">
+              <li>
+                <i id="lamp-official" class="lamp"></i>
+                <div>
+                  <strong>Online folder</strong>
+                  <small id="label-official">Not set</small>
+                </div>
+              </li>
+              <li>
+                <i id="lamp-sandbox" class="lamp"></i>
+                <div>
+                  <strong>LSPDFR folder</strong>
+                  <small id="label-sandbox">Not set</small>
+                </div>
+              </li>
+              <li>
+                <i id="lamp-rph" class="lamp"></i>
+                <div>
+                  <strong>Rage Plugin Hook</strong>
+                  <small id="label-rph">Not installed</small>
+                </div>
+              </li>
+            </ul>
+            <div class="row-actions">
+              <button id="btn-open-official" class="ghost" type="button">Open Online</button>
+              <button id="btn-open-sandbox" class="ghost" type="button">Open LSPDFR</button>
+            </div>
+          </section>
+        </aside>
+
+        <section class="workspace">
+          <div
+            id="dropzone"
+            class="dropzone"
+            tabindex="0"
+          >
+            <div>
+              <p class="drop-kicker">Hands-off install</p>
+              <h2>Drop LSPDFR here</h2>
+              <p>The app unpacks it, installs it, turns BattlEye off, and runs a function test.</p>
+              <div class="row-actions" style="justify-content: center">
+                <button id="btn-browse" class="ghost" type="button">Browse files</button>
+                <button id="btn-browse-folder" class="ghost" type="button">Browse folder</button>
+              </div>
+            </div>
+          </div>
+
+          <section class="card mods-card">
+            <div class="mods-head">
+              <div>
+                <p class="section-label">Installed in LSPDFR folder</p>
+                <p class="mods-sub">Grouped by pack type. Cars, maps, and sounds stay in this folder only.</p>
+              </div>
+              <span id="mod-count" class="count">0</span>
+            </div>
+            <div id="mod-list" class="mod-list">
+              <p class="empty">Nothing installed yet. Drop an archive to start.</p>
+            </div>
+          </section>
+
+          <section class="card log-card">
+            <p class="section-label">Activity</p>
+            <ol id="log" class="log"></ol>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true">
+      <div id="dialog" class="dialog">
+        <div id="dialog-body"></div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

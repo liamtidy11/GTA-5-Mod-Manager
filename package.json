@@ -1,0 +1,19 @@
+{
+  "name": "tactix-tactical",
+  "productName": "GTA 5 Mod Manager",
+  "version": "1.0.0",
+  "description": "GTA V Enhanced LSPDFR manager with a separate Online install",
+  "main": "src/main.js",
+  "author": "GTA 5 Mod Manager",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "verify": "node scripts/verify-launch.js"
+  },
+  "dependencies": {
+    "7zip-bin": "^5.2.0"
+  },
+  "devDependencies": {
+    "electron": "^36.5.0"
+  }
+}

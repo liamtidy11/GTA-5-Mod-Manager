@@ -1,0 +1,8 @@
+node_modules/
+Grand Theft Auto V Enhanced*/
+Grand Theft Auto V/
+*.rpf
+*.log
+*.dmp
+*.rcr
+.restore-points/
