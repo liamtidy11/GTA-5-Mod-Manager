@@ -7,6 +7,16 @@ const DEFAULTS = {
   launcher: "unknown",
   cloneMode: "linked",
   setupComplete: false,
+  // V6 personal settings.
+  defaultProfileId: "",
+  snapshotBeforeUpdate: true,
+  snapshotBeforeRiskyInstall: true,
+  smartPreviewDefault: false,
+  sessionRetention: 40,
+  autoSnapshotRetention: 15,
+  openLastPage: false,
+  lastPage: "dashboard",
+  developerMode: false,
 };
 
 function configPath(userData) {

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { exists, safeJoin, isEnhancedFolder } = require("./paths");
 const modScanner = require("./modScanner");
 const modClassifier = require("./modClassifier");
@@ -9,15 +10,35 @@ const archiveSecurity = require("./archiveSecurity");
 const manifestStore = require("./manifestStore");
 const backupManager = require("./backupManager");
 const { hashFileSync } = require("./hashUtil");
+const environmentInventory = require("./environmentInventory");
+const modRecognition = require("./modRecognition");
+const versionDetector = require("./versionDetector");
+const readmeAnalyzer = require("./readmeAnalyzer");
+const dependencyResolver = require("./dependencyResolver");
+const compatibilityService = require("./compatibilityService");
+const recommendationEngine = require("./recommendationEngine");
+const { fingerprintPath } = require("./packageFingerprint");
+const { applyConfigPolicy } = require("./configPolicy");
+const { snapshotEnvironment, revalidate } = require("./staleAnalysis");
+const { appendAudit, bumpMetric, pushHistory } = require("./smartAudit");
+const { SCHEMA_VERSION } = require("./manifestValidate");
+const { diagnoseManagedMod, ownershipChanges } = require("./orphanDetector");
+const { saveInstalledFile, removeStore } = require("./payloadStore");
+const { repairManagedMod } = require("./smartRepair");
+const { SmartInstallError, wrap } = require("./smartErrors");
+const { analyzeVehiclePackage, applyArchiveRequiredGuard } = require("./vehicle/vehiclePackageAnalyzer");
+const gtaArchiveService = require("./archive/gtaArchiveService");
+const { isVehicleArchiveAsset } = require("./vehicle/vehicleAssetGrouper");
+const { listDutyCandidateArchives } = require("./archive/archiveIndex");
 
-// Smart Install v1 orchestrator. Pipeline:
-//   stage/extract -> scan -> archive security -> classify -> map destinations
-//   -> conflict + protected-file check -> preview
-//   -> (commit) backup -> transactional copy -> verify -> manifest
-//   -> rollback on any failure; uninstall/enable via manifest + ownership.
+// Smart Install V2 orchestrator. Analysis is read-only on Duty.
+// Pipeline:
+//   Archive security → Staging → Scan → Classification → Recognition
+//   → Environment Inventory → README evidence → Dependency Resolution
+//   → Compatibility → Install Safety → Recommendation → Preview → Commit
 //
-// Everything is decoupled from the working launch path. It never touches
-// launcher/battleye/permissions and only writes inside the Duty folder.
+// Commit is the only stage that writes managed Duty files. It never touches
+// launcher/battleye/permissions.
 
 function slug(name) {
   return (
@@ -34,6 +55,23 @@ function uniqueId(name) {
   return `${slug(name)}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
 }
 
+function analysisId() {
+  return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : uniqueId("analysis");
+}
+
+function describeUpdate(existing, files) {
+  if (!existing) return null;
+  const current = new Set((existing.files || []).map((f) => String(f.destination || f).replace(/\\/g, "/").toLowerCase()));
+  const planned = (files || []).filter((f) => f.action === "add" || f.action === "replace");
+  const incoming = new Set(planned.map((f) => String(f.destination).replace(/\\/g, "/").toLowerCase()));
+  return {
+    added: planned.filter((f) => f.action === "add").map((f) => f.destination),
+    replaced: planned.filter((f) => f.action === "replace").map((f) => f.destination),
+    removed: [...current].filter((dest) => !incoming.has(dest)),
+    configsPreserved: (files || []).filter((f) => f.config && f.action === "skip").map((f) => f.destination),
+  };
+}
+
 function cleanName(name) {
   return String(name || "mod").replace(/\.(zip|rar|7z|oiv|exe)$/i, "");
 }
@@ -43,22 +81,41 @@ function cleanName(name) {
 // analyze({ source, dutyPath, dataDir, stagingRoot, officialPath?, legacyOwnersOf? })
 // source may be a folder (scanned in place) or an archive (extracted to
 // stagingRoot). Returns a preview object suitable for a UI and for commit().
-async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = "", legacyOwnersOf = null }) {
-  if (!exists(source)) throw new Error("That file or folder no longer exists.");
+async function analyze({
+  source,
+  dutyPath,
+  dataDir,
+  stagingRoot,
+  officialPath = "",
+  legacyOwnersOf = null,
+  configPolicy = "KEEP_EXISTING",
+  vehiclePathMap = null,
+  mockArchivePath = "",
+  discoverOptions: discoverOptionsOverride = null,
+}) {
+  if (!exists(source)) {
+    throw new SmartInstallError("PACKAGE_ERROR", "That file or folder no longer exists.", {
+      whatToDo: "Drop the archive again.",
+    });
+  }
 
   const baseName = path.basename(source);
-  const id = uniqueId(baseName);
+  const createdAt = new Date().toISOString();
+  const analysisKey = analysisId();
+  let id = uniqueId(baseName);
   let payloadDir = source;
   let stagingDir = null;
 
   const stat = fs.statSync(source);
   if (!stat.isDirectory()) {
     if (!/\.(zip|rar|7z|oiv|exe)$/i.test(source)) {
-      throw new Error("Drop a mod folder or archive (zip, rar, 7z, oiv).");
+      throw new SmartInstallError("PACKAGE_ERROR", "Drop a mod folder or archive (zip, rar, 7z, oiv).", {
+        whatToDo: "Use a supported package type.",
+      });
     }
     // Lazy-require the existing extractor so folder installs stay lightweight.
     const installer = require("./installer");
-    stagingDir = path.join(stagingRoot, id);
+    stagingDir = path.join(stagingRoot, analysisKey);
     if (exists(stagingDir)) await fs.promises.rm(stagingDir, { recursive: true, force: true });
     await installer.extractArchive(source, stagingDir);
     payloadDir = stagingDir;
@@ -66,10 +123,10 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
 
   const scan = modScanner.scan(payloadDir);
   if (scan.isFullGame) {
-    throw new Error("That looks like a full GTA V install. Drop the mod pack, not the game folder.");
+    throw new SmartInstallError("PACKAGE_ERROR", "That looks like a full GTA V install. Drop the mod pack, not the game folder.");
   }
   if (scan.empty) {
-    throw new Error("No installable files were found in that folder or archive.");
+    throw new SmartInstallError("PACKAGE_ERROR", "No installable files were found in that folder or archive.");
   }
 
   // Treat the archive as untrusted: reject traversal, surface executables.
@@ -78,14 +135,31 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     scan.root
   );
   if (!security.ok) {
-    throw new Error(
-      `Blocked: the archive contains unsafe paths that escape the folder (${security.traversal
-        .slice(0, 3)
-        .join(", ")}).`
+    bumpMetric(dataDir, "blockedPackages");
+    throw new SmartInstallError(
+      "SECURITY_ERROR",
+      `The archive contains unsafe paths that escape the folder (${security.traversal.slice(0, 3).join(", ")}).`,
+      { whatToDo: "Use a normal mod archive. No files were changed." }
     );
   }
 
   const classification = modClassifier.classify(scan);
+  const recognition = modRecognition.recognize(scan, {
+    archiveName: baseName,
+    classificationType: classification.type,
+  });
+  const matchedDll = ((recognition.knowledge && recognition.knowledge.recognition.dllNames) || []).find((dll) =>
+    scan.usableFiles.some((f) => f.base.toLowerCase() === String(dll).toLowerCase())
+  );
+  let droppedVersion = "UNKNOWN";
+  if (matchedDll) {
+    const abs = path.join(
+      scan.root,
+      scan.usableFiles.find((f) => f.base.toLowerCase() === String(matchedDll).toLowerCase()).rel.split("/").join(path.sep)
+    );
+    droppedVersion = versionDetector.detectFileVersion(abs).version;
+  }
+  const duplicate = modRecognition.detectInstalled(recognition, { dutyPath, dataDir, droppedVersion });
 
   // Executables are never installed or run. We surface them and skip them.
   const executableItems = classification.perFile.filter((item) => archiveSecurity.isExecutable(item.rel));
@@ -109,7 +183,7 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
 
   // Merge conflict actions back onto the file plan.
   const planByDest = new Map(conflicts.plan.map((p) => [`${p.rel}=>${p.destination}`, p]));
-  const files = copies.map((c) => {
+  let files = copies.map((c) => {
     const p = planByDest.get(`${c.rel}=>${c.destination}`) || { action: "add", severity: "NONE" };
     return {
       source: c.rel,
@@ -137,6 +211,48 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     });
   }
 
+  const existingManaged =
+    duplicate.alreadyInstalled && duplicate.installed && duplicate.installed.source === "MANIFEST"
+      ? manifestStore.read(dataDir, duplicate.installed.id)
+      : null;
+  if (existingManaged) id = existingManaged.id;
+  const applied =
+    existingManaged
+      ? applyConfigPolicy(files, { dutyPath, payloadRoot: scan.root, policy: configPolicy })
+      : { files, configPolicy, configDiffs: [] };
+  files = applied.files;
+
+  let discoverOptions = null;
+  try {
+    const candidates = listDutyCandidateArchives(dutyPath, officialPath);
+    if (candidates.length) {
+      const inventory = environmentInventory.getInventory({ dutyPath, dataDir });
+      discoverOptions = {
+        candidateArchives: candidates,
+        dataDir,
+        gtaBuild: (inventory.gta && inventory.gta.version) || "",
+        officialPath,
+      };
+    }
+  } catch {
+    discoverOptions = null;
+  }
+  if (discoverOptionsOverride) discoverOptions = discoverOptionsOverride;
+
+  const vehicle = analyzeVehiclePackage(scan, {
+    dataDir,
+    pathMap: vehiclePathMap,
+    mockArchivePath,
+    discoverOptions,
+    capabilities: gtaArchiveService.getCapabilities(),
+    dutyPath,
+    officialPath,
+    layer: null,
+  });
+  if (vehicle.archiveRequired) {
+    files = applyArchiveRequiredGuard(files, vehicle);
+  }
+
   // Overall severity + attention items include the surfaced executables.
   const items = [...conflicts.items];
   let severity = conflicts.severity;
@@ -154,6 +270,45 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
 
   // Drop-time dependency + compatibility checks (byte-scan of plugin DLLs).
   const deps = dependencyChecker.check({ files, payloadRoot: scan.root, dutyPath });
+  const readme = readmeAnalyzer.analyze(scan);
+  const resolved = dependencyResolver.resolve({
+    recognition,
+    dutyPath,
+    dataDir,
+    packFiles: copies,
+    readme,
+    packageDeps: deps,
+  });
+  const installedMods = manifestStore.list(dataDir).map((mod) => ({
+    id: mod.id,
+    modId: mod.recognitionModId || "",
+    name: mod.name,
+    enabled: mod.enabled !== false,
+  }));
+  const compatibility = compatibilityService.evaluate({
+    recognition,
+    dutyPath,
+    dataDir,
+    dependencies: resolved.dependencies,
+    installedMods,
+    packageCompatibility: deps.compatibility,
+  });
+  const installSafety = recommendationEngine.evaluateInstallSafety({
+    conflicts: { severity, items },
+    security,
+    files,
+    usableCount: classification.usableCount,
+    rollbackAvailable: true,
+    archiveRequired: vehicle.archiveRequired,
+    archiveCapabilities: gtaArchiveService.getCapabilities(),
+  });
+  const recommendation = recommendationEngine.recommend({
+    compatibility,
+    installSafety,
+    dependencies: resolved.dependencies,
+    recognition,
+    duplicate,
+  });
   for (const dep of deps.dependencies) {
     if (dep.present) continue;
     severity = conflictDetector.maxSeverity(severity, dep.level === "required" ? "WARNING" : "WARNING");
@@ -164,6 +319,17 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     severity = conflictDetector.maxSeverity(severity, level);
     items.push({ level, code: "compatibility", message: compat.note, files: [] });
   }
+  if (duplicate.alreadyInstalled) {
+    const installedVer = (duplicate.installed && duplicate.installed.version) || "UNKNOWN";
+    items.push({
+      level: "WARNING",
+      code: "already-installed",
+      message: duplicate.possibleUpdate
+        ? `${recognition.name} appears to be already installed (${installedVer}). This package may be an update (${droppedVersion}).`
+        : `${recognition.name} appears to be already installed.`,
+      files: [],
+    });
+  }
 
   const counts = {
     add: files.filter((f) => f.action === "add").length,
@@ -172,13 +338,29 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     noop: files.filter((f) => f.action === "noop").length,
   };
 
+  const environmentSnapshot = snapshotEnvironment({
+    dutyPath,
+    officialPath,
+    source,
+    payloadRoot: scan.root,
+    files,
+  });
+  const canonicalModId = recognition.modId || null;
+  appendAudit(dataDir, "ANALYZED", { installId: id, canonicalModId, analysisId: analysisKey });
+
   return {
     id,
+    installId: id,
+    analysisId: analysisKey,
+    analysisVersion: 1,
+    createdAt,
     name: cleanName(baseName),
     source,
+    sourceArchive: baseName,
+    sourceArchiveHash: environmentSnapshot.sourceArchiveHash,
     stagingDir,
     payloadRoot: scan.root,
-    type: classification.type,
+    type: vehicle.detected ? vehicle.displayType : classification.type,
     confidence: classification.confidence,
     mode: classification.mode,
     modeLabel: classification.modeLabel,
@@ -189,8 +371,34 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     conflicts: { severity, items },
     executables: security.executables,
     dependencies: deps.dependencies,
-    compatibility: deps.compatibility,
+    resolvedDependencies: resolved.dependencies,
+    dependencySummary: resolved.summary,
+    readmeEvidence: readme.dependencies,
+    packageCompatibility: deps.compatibility,
+    compatibility,
+    installSafety,
+    recommendation,
+    recognition: {
+      modId: recognition.modId,
+      name: recognition.name,
+      category: recognition.category,
+      confidence: recognition.confidence,
+      band: recognition.band,
+      signals: recognition.signals,
+      candidates: recognition.candidates || [],
+      ambiguous: Boolean(recognition.ambiguous),
+    },
+    canonicalModId,
+    droppedVersion,
+    duplicate,
+    configPolicy: applied.configPolicy,
+    configDiffs: applied.configDiffs,
+    updateReview: describeUpdate(existingManaged, files),
+    environmentSnapshot,
     files,
+    vehicle,
+    archiveRequired: Boolean(vehicle.archiveRequired),
+    archivePlan: vehicle.plan || null,
   };
 }
 
@@ -211,34 +419,84 @@ function copyVerified(sourceAbs, destAbs) {
   return srcHash;
 }
 
-// commit({ preview, dutyPath, dataDir, onProgress? }) -> manifest
-async function commit({ preview, dutyPath, dataDir, onProgress = null }) {
+// commit({ preview, dutyPath, dataDir, onProgress?, officialPath?, hooks?, checkRunning?, configPolicy? }) -> manifest
+async function commit({
+  preview,
+  dutyPath,
+  dataDir,
+  onProgress = null,
+  officialPath = "",
+  hooks = null,
+  checkRunning = false,
+} = {}) {
+  const installId = preview.installId || preview.id;
+  const canonicalModId = preview.canonicalModId || (preview.recognition && preview.recognition.modId) || null;
+  appendAudit(dataDir, "INSTALL_STARTED", {
+    installId,
+    canonicalModId,
+    analysisId: preview.analysisId || "",
+  });
+
   if (!isEnhancedFolder(dutyPath)) {
-    throw new Error("The Duty (LSPDFR) folder is not set up yet. Create it before installing.");
+    throw new SmartInstallError("DESTINATION_ERROR", "The Duty (LSPDFR) folder is not set up yet. Create it before installing.");
   }
+  if (preview.archiveRequired) {
+    throw new SmartInstallError(
+      "ARCHIVE_ERROR",
+      "Native GTA archive writing is not enabled in this build.",
+      { whatToDo: "This package requires archive installation. No files were changed." }
+    );
+  }
+  const archiveCopyAttempt = (preview.files || []).filter(
+    (f) => (f.action === "add" || f.action === "replace") && isVehicleArchiveAsset(f.source || f.destination)
+  );
+  if (archiveCopyAttempt.length) {
+    throw new SmartInstallError(
+      "ARCHIVE_ERROR",
+      "Archive-required vehicle assets cannot be copied into the Duty folder.",
+      { whatToDo: "No files were changed." }
+    );
+  }
+
   if (preview.conflicts && preview.conflicts.severity === "BLOCKED") {
+    bumpMetric(dataDir, "blockedPackages");
     const why = (preview.conflicts.items || [])
       .filter((i) => i.level === "BLOCKED")
       .map((i) => i.message)
       .join(" ");
-    throw new Error(`This install is blocked: ${why}`);
+    throw new SmartInstallError("SECURITY_ERROR", `This install is blocked: ${why}`, {
+      whatToDo: "No files have been changed.",
+    });
   }
+
+  revalidate(preview, { dutyPath, officialPath, checkRunning });
 
   const ops = (preview.files || []).filter((f) => f.action === "add" || f.action === "replace");
   const journal = [];
+  const previous = manifestStore.read(dataDir, installId);
+  let rolled = false;
 
   try {
     for (let i = 0; i < ops.length; i += 1) {
+      if (hooks && hooks.failAtCopy === i) {
+        throw new SmartInstallError("TRANSACTION_ERROR", `Simulated copy failure at ${ops[i].destination}`, {
+          file: ops[i].destination,
+        });
+      }
       const op = ops[i];
       const destAbs = safeJoin(dutyPath, op.destination.replace(/\//g, path.sep));
       const sourceAbs = path.join(preview.payloadRoot, op.source.split("/").join(path.sep));
 
       let backupRel = null;
       if (op.action === "replace" && exists(destAbs)) {
-        backupRel = backupManager.backupFile(dataDir, preview.id, op.destination, destAbs);
+        if (hooks && hooks.failBackup) {
+          throw new SmartInstallError("TRANSACTION_ERROR", "Backup creation failed.", { file: op.destination });
+        }
+        backupRel = backupManager.backupFile(dataDir, installId, op.destination, destAbs);
       }
 
       const hash = copyVerified(sourceAbs, destAbs);
+      saveInstalledFile(dataDir, installId, op.destination, destAbs);
       journal.push({ destAbs, destination: op.destination, action: op.action, backupRel, hash });
 
       if (onProgress && (i % 10 === 0 || i === ops.length - 1)) {
@@ -246,15 +504,37 @@ async function commit({ preview, dutyPath, dataDir, onProgress = null }) {
       }
     }
 
+    if (hooks && hooks.failValidate) {
+      throw new SmartInstallError("TRANSACTION_ERROR", "Copy validation failed.");
+    }
+    if (hooks && hooks.failManifest) {
+      throw new SmartInstallError("TRANSACTION_ERROR", "Manifest write failed.");
+    }
+
+    const relation = (preview.duplicate && preview.duplicate.relation) || "NEW";
+    const historyEvent =
+      relation === "UPDATE" ? "UPDATED" : relation === "DOWNGRADE" ? "DOWNGRADED" : previous ? "REINSTALLED" : "INSTALLED";
     const manifest = {
-      id: preview.id,
+      schemaVersion: SCHEMA_VERSION,
+      id: installId,
+      installId,
+      analysisId: preview.analysisId || "",
+      canonicalModId,
       name: preview.name,
       source: path.basename(preview.source || ""),
+      sourceArchiveHash: preview.sourceArchiveHash || "",
       type: preview.type,
+      version: preview.droppedVersion || "UNKNOWN",
       confidence: preview.confidence,
-      installedAt: new Date().toISOString(),
+      installedAt: (previous && previous.installedAt) || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       enabled: true,
-      compatibility: "UNKNOWN",
+      compatibility: (preview.compatibility && preview.compatibility.status) || "UNKNOWN",
+      compatibilityStatus: (preview.compatibility && preview.compatibility.status) || "UNKNOWN",
+      recognitionModId: canonicalModId || "",
+      dependencySummary: preview.dependencySummary || null,
+      recommendationStatus: (preview.recommendation && preview.recommendation.status) || "",
+      configPolicy: preview.configPolicy || "KEEP_EXISTING",
       files: journal.map((j) => ({
         destination: j.destination,
         action: j.action,
@@ -265,41 +545,100 @@ async function commit({ preview, dutyPath, dataDir, onProgress = null }) {
         .filter((f) => f.action === "skip")
         .map((f) => ({ destination: f.destination, reason: f.reason })),
       executables: preview.executables || [],
+      history: previous
+        ? pushHistory(previous, historyEvent)
+        : [{ event: "INSTALLED", at: new Date().toISOString() }],
+      archiveOperations: Array.isArray(previous && previous.archiveOperations) ? previous.archiveOperations : [],
     };
     manifestStore.write(dataDir, manifest);
 
     if (preview.stagingDir) await discardStaging(preview.stagingDir);
+    environmentInventory.invalidate({ dutyPath, dataDir });
+    appendAudit(dataDir, "INSTALL_COMMITTED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
+    if (historyEvent === "UPDATED") appendAudit(dataDir, "UPDATED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
+    if (historyEvent === "DOWNGRADED") appendAudit(dataDir, "DOWNGRADED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
+    bumpMetric(dataDir, "successfulInstalls");
     return manifest;
   } catch (error) {
-    // Roll back every file we touched, in reverse order.
+    appendAudit(dataDir, "INSTALL_FAILED", {
+      installId,
+      canonicalModId,
+      analysisId: preview.analysisId || "",
+      details: error.message,
+    });
+    appendAudit(dataDir, "ROLLBACK_STARTED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
+    let rollbackFailed = false;
     for (let i = journal.length - 1; i >= 0; i -= 1) {
       const entry = journal[i];
       try {
+        if (hooks && hooks.failRollback) {
+          throw new Error("Simulated rollback failure");
+        }
         if (entry.action === "add") {
           if (exists(entry.destAbs)) fs.rmSync(entry.destAbs, { force: true });
         } else if (entry.action === "replace") {
           if (entry.backupRel) {
-            backupManager.restore(dataDir, preview.id, entry.destination, entry.destAbs);
+            backupManager.restore(dataDir, installId, entry.destination, entry.destAbs);
           } else if (exists(entry.destAbs)) {
             fs.rmSync(entry.destAbs, { force: true });
           }
         }
       } catch {
-        /* best-effort rollback */
+        rollbackFailed = true;
       }
     }
-    backupManager.removeModBackups(dataDir, preview.id);
-    manifestStore.remove(dataDir, preview.id);
-    throw new Error(`Install failed and was rolled back: ${error.message}`);
+    if (!previous) {
+      backupManager.removeModBackups(dataDir, installId);
+      removeStore(dataDir, installId);
+      manifestStore.remove(dataDir, installId);
+    } else {
+      manifestStore.write(dataDir, previous);
+    }
+    rolled = true;
+    appendAudit(dataDir, "ROLLBACK_COMPLETED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
+    if (rollbackFailed) {
+      bumpMetric(dataDir, "rollbackFailures");
+      throw new SmartInstallError("ROLLBACK_ERROR", "Install failed and automatic restore was incomplete.", {
+        whatToDo: "Close GTA V and RAGE Plugin Hook, then try again. Check the Duty folder before launching.",
+      });
+    }
+    throw wrap("TRANSACTION_ERROR", new Error(`Install failed and was rolled back: ${error.message}`), {
+      whatToDo: "Your existing installation was restored automatically.",
+      file: error.file || "",
+    });
+  } finally {
+    void rolled;
   }
 }
 
 // ---- Uninstall -----------------------------------------------------------
 
 // uninstall({ modId, dutyPath, dataDir }) -> { id, removed, restored, kept }
-async function uninstall({ modId, dutyPath, dataDir }) {
+async function uninstall({ modId, dutyPath, dataDir, force = false }) {
   const manifest = manifestStore.read(dataDir, modId);
-  if (!manifest) throw new Error("That mod is not in the Smart Install registry.");
+  if (!manifest) throw new SmartInstallError("TRANSACTION_ERROR", "That mod is not in the Smart Install registry.");
+  if (manifest.manifestStatus === "MANIFEST_ERROR") {
+    throw new SmartInstallError("TRANSACTION_ERROR", "This mod's manifest is unreadable.", {
+      whatToDo: "Files were left untouched. Inspect the manifest before removing anything.",
+    });
+  }
+
+  const changed = ownershipChanges(manifest, dutyPath).filter((item) => {
+    if (manifestStore.ownersOf(dataDir, item.destination, modId).length) return false;
+    const record = (manifest.files || []).find((file) => file.destination === item.destination);
+    return Boolean(record && record.backup);
+  });
+  if (changed.length && !force) {
+    throw new SmartInstallError(
+      "STATE_CHANGED",
+      "FILE CHANGED OUTSIDE MOD MANAGER\n\nRemoving this mod may overwrite another change.",
+      {
+        file: changed[0].destination,
+        whatToDo: "Review the changed files, then confirm removal if you still want to uninstall.",
+        details: changed.map((item) => item.destination).join(", "),
+      }
+    );
+  }
 
   let removed = 0;
   let restored = 0;
@@ -326,8 +665,11 @@ async function uninstall({ modId, dutyPath, dataDir }) {
   }
 
   backupManager.removeModBackups(dataDir, modId);
+  removeStore(dataDir, modId);
   manifestStore.remove(dataDir, modId);
-  return { id: modId, removed, restored, kept };
+  environmentInventory.invalidate({ dutyPath, dataDir });
+  appendAudit(dataDir, "REMOVED", { installId: modId, canonicalModId: manifest.canonicalModId || manifest.recognitionModId || null });
+  return { id: modId, removed, restored, kept, changed };
 }
 
 // ---- Enable / disable (park) --------------------------------------------
@@ -338,7 +680,7 @@ function disabledRoot(dataDir, modId) {
 
 async function setEnabled({ modId, dutyPath, dataDir, enabled }) {
   const manifest = manifestStore.read(dataDir, modId);
-  if (!manifest) throw new Error("That mod is not in the Smart Install registry.");
+  if (!manifest) throw new SmartInstallError("TRANSACTION_ERROR", "That mod is not in the Smart Install registry.");
   if (Boolean(manifest.enabled) === Boolean(enabled)) return manifest;
 
   if (!enabled) {
@@ -367,7 +709,13 @@ async function setEnabled({ modId, dutyPath, dataDir, enabled }) {
   }
 
   manifest.enabled = Boolean(enabled);
+  manifest.history = pushHistory(manifest, enabled ? "ENABLED" : "DISABLED");
   manifestStore.write(dataDir, manifest);
+  environmentInventory.invalidate({ dutyPath, dataDir });
+  appendAudit(dataDir, enabled ? "ENABLED" : "DISABLED", {
+    installId: modId,
+    canonicalModId: manifest.canonicalModId || manifest.recognitionModId || null,
+  });
   return manifest;
 }
 
@@ -377,8 +725,53 @@ async function discardStaging(stagingDir) {
   }
 }
 
-function list(dataDir) {
-  return manifestStore.list(dataDir);
+function cardHealth(mod) {
+  if (mod.enabled === false) return "Warning";
+  const summary = mod.dependencySummary;
+  if (summary && summary.hasBlockingDependencyIssue) return "Broken";
+  const status = mod.compatibilityStatus || mod.compatibility;
+  if (status === "INCOMPATIBLE") return "Broken";
+  if (status === "WARNING") return "Warning";
+  return "Healthy";
+}
+
+function list(dataDir, dutyPath = "") {
+  return manifestStore.list(dataDir).map((mod) => {
+    const summary = mod.dependencySummary || {};
+    const requiredTotal = Number(summary.requiredTotal) || 0;
+    const requiredSatisfied = Number(summary.requiredSatisfied) || 0;
+    const diagnosis = dutyPath ? diagnoseManagedMod(mod, { dutyPath, dataDir }) : null;
+    let health = cardHealth(mod);
+    if (mod.manifestStatus === "MANIFEST_ERROR") health = "Broken";
+    else if (diagnosis && diagnosis.status === "BROKEN") health = "Broken";
+    else if (diagnosis && diagnosis.status === "WARNING" && health === "Healthy") health = "Warning";
+    return {
+      ...mod,
+      compatibilityStatus: mod.compatibilityStatus || mod.compatibility || "UNKNOWN",
+      requiredTotal,
+      requiredSatisfied,
+      cardHealth: health,
+      managedStatus: (diagnosis && diagnosis.status) || (mod.enabled === false ? "WARNING" : "HEALTHY"),
+      historyLabels: (mod.history || []).slice(-5).map((entry) => {
+        const when = entry.at ? new Date(entry.at).toLocaleDateString() : "";
+        return `${entry.event} ${when}`.trim();
+      }),
+    };
+  });
+}
+
+function repair({ modId, dutyPath, dataDir }) {
+  const manifest = manifestStore.read(dataDir, modId);
+  if (!manifest) throw new SmartInstallError("TRANSACTION_ERROR", "That mod is not in the Smart Install registry.");
+  const result = repairManagedMod({ manifest, dutyPath, dataDir });
+  const next = {
+    ...manifest,
+    history: pushHistory(manifest, "REPAIRED"),
+  };
+  manifestStore.write(dataDir, next);
+  appendAudit(dataDir, "REPAIRED", { installId: modId, canonicalModId: manifest.canonicalModId || null });
+  environmentInventory.invalidate({ dutyPath, dataDir });
+  return result;
 }
 
 module.exports = {
@@ -388,5 +781,7 @@ module.exports = {
   setEnabled,
   discardStaging,
   list,
+  repair,
+  ownershipChanges,
   slug,
 };

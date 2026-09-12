@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "note": "Built-in recognition catalog only. Entries list filenames and aliases already used by this manager. Dependencies, authors, version constraints, and compatibility stay empty/UNKNOWN unless independently verified later.",
+  "mods": [
+    {
+      "id": "lspdfr",
+      "name": "LSPDFR",
+      "aliases": ["LSPD First Response", "LSPD First Response.dll"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["LSPD First Response.dll", "LSPDFR.dll"],
+        "archivePatterns": ["lspdfr"],
+        "folderPatterns": ["plugins/LSPDFR"],
+        "configNames": ["LSPD First Response.dll.config"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "rage-plugin-hook",
+      "name": "RAGE Plugin Hook",
+      "aliases": ["RAGEPluginHook", "RagePluginHook", "RPH"],
+      "authors": [],
+      "category": "RAGE_PLUGIN",
+      "recognition": {
+        "dllNames": ["RagePluginHook.exe", "RAGEPluginHook.exe"],
+        "archivePatterns": ["ragepluginhook", "rage-plugin-hook"],
+        "folderPatterns": [],
+        "configNames": ["RagePluginHook.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "directstoragefix",
+      "name": "DirectStorageFix",
+      "aliases": ["DirectStorage Fix"],
+      "authors": [],
+      "category": "ASI",
+      "recognition": {
+        "dllNames": ["DirectStorageFix.asi"],
+        "archivePatterns": ["directstoragefix"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "heapadjuster",
+      "name": "HeapAdjuster Enhanced",
+      "aliases": ["HeapAdjuster", "Heap Adjuster"],
+      "authors": [],
+      "category": "ASI",
+      "recognition": {
+        "dllNames": ["HeapAdjuster.asi", "HeapAdjusterEnhanced.asi"],
+        "archivePatterns": ["heapadjuster"],
+        "folderPatterns": [],
+        "configNames": ["HeapAdjuster.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "packfile-limit-adjuster",
+      "name": "Packfile Limit Adjuster Enhanced",
+      "aliases": ["PackfileLimitAdjuster", "PackFileLimitAdjusterEnhanced"],
+      "authors": [],
+      "category": "ASI",
+      "recognition": {
+        "dllNames": ["PackfileLimitAdjuster.asi", "PackfileLimitAdjusterEnhanced.asi"],
+        "archivePatterns": ["packfilelimitadjuster"],
+        "folderPatterns": [],
+        "configNames": ["PackfileLimitAdjuster.ini", "PackfileLimitAdjusterEnhanced.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "scripthookv",
+      "name": "Script Hook V",
+      "aliases": ["ScriptHookV"],
+      "authors": [],
+      "category": "ASI",
+      "recognition": {
+        "dllNames": ["ScriptHookV.dll"],
+        "archivePatterns": ["scripthookv"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "scripthookvdotnet",
+      "name": "Script Hook V .NET",
+      "aliases": ["ScriptHookVDotNet", "SHVDN"],
+      "authors": [],
+      "category": "ASI",
+      "recognition": {
+        "dllNames": ["ScriptHookVDotNet.asi", "ScriptHookVDotNet2.dll", "ScriptHookVDotNet3.dll"],
+        "archivePatterns": ["scripthookvdotnet"],
+        "folderPatterns": [],
+        "configNames": ["ScriptHookVDotNet.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "ragenativeui",
+      "name": "RAGENativeUI",
+      "aliases": ["RageNativeUI"],
+      "authors": [],
+      "category": "DEPENDENCY",
+      "recognition": {
+        "dllNames": ["RAGENativeUI.dll"],
+        "archivePatterns": ["ragenativeui"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "lemonui",
+      "name": "LemonUI",
+      "aliases": ["Lemon UI"],
+      "authors": [],
+      "category": "DEPENDENCY",
+      "recognition": {
+        "dllNames": ["LemonUI.dll"],
+        "archivePatterns": ["lemonui"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "ifruitaddon2",
+      "name": "iFruitAddon2",
+      "aliases": ["iFruit Addon 2"],
+      "authors": [],
+      "category": "DEPENDENCY",
+      "recognition": {
+        "dllNames": ["iFruitAddon2.dll"],
+        "archivePatterns": ["ifruitaddon2"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "ultimate-backup",
+      "name": "Ultimate Backup",
+      "aliases": ["UltimateBackup"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["UltimateBackup.dll"],
+        "archivePatterns": ["ultimatebackup", "ultimate-backup"],
+        "folderPatterns": [],
+        "configNames": ["UltimateBackup.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "stop-the-ped",
+      "name": "Stop The Ped",
+      "aliases": ["StopThePed"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["StopThePed.dll"],
+        "archivePatterns": ["stoptheped", "stop-the-ped"],
+        "folderPatterns": [],
+        "configNames": ["StopThePed.ini"],
+        "readmeTerms": []
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    }
+  ]
+}

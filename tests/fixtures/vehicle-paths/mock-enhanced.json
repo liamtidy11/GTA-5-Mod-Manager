@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "edition": "Enhanced",
+  "note": "Test-only mock mappings. Not production truth.",
+  "vehicleSlots": {
+    "police": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "police2": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "police3": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "sheriff": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "fbi": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "ambulance": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "VERIFIED"
+    },
+    "ambiguouscar": [
+      {
+        "archive": "vehicles.rpf",
+        "entryBase": "x64/levels/gta5/vehicles",
+        "status": "AMBIGUOUS"
+      },
+      {
+        "archive": "dlc.rpf",
+        "entryBase": "dlc/vehicles",
+        "status": "AMBIGUOUS"
+      }
+    ],
+    "hydra": {
+      "archive": "vehicles.rpf",
+      "entryBase": "x64/levels/gta5/vehicles",
+      "status": "UNSUPPORTED"
+    }
+  }
+}

@@ -37,6 +37,13 @@ function makeFakeDuty() {
   return duty;
 }
 
+function cloneArchiveFixture(name) {
+  const src = path.join(__dirname, "fixtures", "archives", name);
+  const dest = tmpDir("mock-archive-");
+  fs.cpSync(src, dest, { recursive: true });
+  return dest;
+}
+
 function cleanup(...dirs) {
   for (const dir of dirs) {
     try {
@@ -47,4 +54,4 @@ function cleanup(...dirs) {
   }
 }
 
-module.exports = { tmpDir, writeFile, readFile, fileExists, makeFakeDuty, cleanup };
+module.exports = { tmpDir, writeFile, readFile, fileExists, makeFakeDuty, cloneArchiveFixture, cleanup };

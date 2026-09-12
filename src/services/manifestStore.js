@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { SCHEMA_VERSION, validateManifest, normalizeListed } = require("./manifestValidate");
 
 // Per-install manifests for Smart Install v1. Each manifest records exactly
 // which files a mod added/replaced, their hashes, and any backups, so an
@@ -22,13 +23,16 @@ function ensureDir(dataDir) {
 
 function write(dataDir, manifest) {
   ensureDir(dataDir);
-  fs.writeFileSync(manifestPath(dataDir, manifest.id), JSON.stringify(manifest, null, 2), "utf8");
-  return manifest;
+  const payload = { ...manifest, schemaVersion: manifest.schemaVersion || SCHEMA_VERSION };
+  fs.writeFileSync(manifestPath(dataDir, payload.id), JSON.stringify(payload, null, 2), "utf8");
+  return payload;
 }
 
 function read(dataDir, id) {
   try {
-    return JSON.parse(fs.readFileSync(manifestPath(dataDir, id), "utf8"));
+    const raw = JSON.parse(fs.readFileSync(manifestPath(dataDir, id), "utf8"));
+    const checked = validateManifest(raw);
+    return checked.manifest || raw;
   } catch {
     return null;
   }
@@ -45,9 +49,10 @@ function list(dataDir) {
   for (const name of names) {
     if (!name.toLowerCase().endsWith(".json")) continue;
     try {
-      out.push(JSON.parse(fs.readFileSync(path.join(manifestsDir(dataDir), name), "utf8")));
+      const raw = JSON.parse(fs.readFileSync(path.join(manifestsDir(dataDir), name), "utf8"));
+      out.push(normalizeListed(raw, name));
     } catch {
-      /* skip unreadable manifest */
+      out.push(normalizeListed(null, name));
     }
   }
   return out.sort((a, b) => String(b.installedAt || "").localeCompare(String(a.installedAt || "")));
@@ -76,6 +81,7 @@ function ownersOf(dataDir, destRel, excludeId = null) {
 }
 
 module.exports = {
+  SCHEMA_VERSION,
   manifestsDir,
   manifestPath,
   write,

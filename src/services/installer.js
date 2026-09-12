@@ -7,6 +7,8 @@ const registry = require("./registry");
 const dlclist = require("./dlclist");
 const { buildPlanFiles, readAssemblyCopies, isJunk, slugPack, RPH_ROOT_DLLS } = require("./modtypes");
 const { exists, safeJoin, tactixDir, isEnhancedFolder } = require("./paths");
+const environmentInventory = require("./environmentInventory");
+const { applyGenericInstallerArchiveGuard } = require("./vehicle/vehiclePackageAnalyzer");
 
 const execFileAsync = promisify(execFile);
 
@@ -188,14 +190,19 @@ function finishPlan({ id, archiveName, extractDir, payloadRoot, files }) {
     throw new Error("No installable LSPDFR or GTA files were found in that folder.");
   }
 
+  const guarded = applyGenericInstallerArchiveGuard(mapped.copies);
+  if (guarded.archiveRequired && !guarded.copies.length) {
+    throw new Error(guarded.reason);
+  }
+
   return {
     id,
     archiveName,
     extractDir,
     payloadRoot: mapped.payloadRoot,
-    files: mapped.copies.map((copy) => copy.to),
-    copies: mapped.copies,
-    fileCount: mapped.copies.length,
+    files: guarded.copies.map((copy) => copy.to),
+    copies: guarded.copies,
+    fileCount: guarded.copies.length,
     folders: mapped.destinations,
     kinds: mapped.kinds,
     kindLabels: mapped.kindLabels,
@@ -339,6 +346,7 @@ function repairLspdfrLayout(sandboxPath) {
       /* file may be locked by a running game */
     }
   }
+  environmentInventory.invalidate({ dutyPath: sandboxPath });
 }
 
 async function mirrorRageDepsToPlugins(sandboxPath) {
@@ -378,6 +386,9 @@ async function commit({ plan, sandboxPath, officialPath, onProgress }) {
       }
     }
     if (/^nativetrainer\.asi$/i.test(path.basename(relTo))) {
+      continue;
+    }
+    if (/\.(yft|ytd)$/i.test(relFrom) || /\.(yft|ytd)$/i.test(relTo)) {
       continue;
     }
 
@@ -429,6 +440,7 @@ async function commit({ plan, sandboxPath, officialPath, onProgress }) {
     /* leftover staging is harmless */
   }
 
+  environmentInventory.invalidate({ dutyPath: sandboxPath });
   return record;
 }
 
@@ -489,6 +501,7 @@ async function uninstall(sandboxPath, officialPath, modId) {
   }
 
   registry.remove(sandboxPath, modId);
+  environmentInventory.invalidate({ dutyPath: sandboxPath });
   return { id: modId };
 }
 
@@ -541,7 +554,9 @@ async function setEnabled(sandboxPath, officialPath, modId, enabled) {
     if (mod.dlcPacks?.length) dlclist.registerPacks(sandboxPath, mod.dlcPacks);
   }
 
-  return registry.update(sandboxPath, modId, { enabled });
+  const updated = registry.update(sandboxPath, modId, { enabled });
+  environmentInventory.invalidate({ dutyPath: sandboxPath });
+  return updated;
 }
 
 async function discardStaging(extractDir) {

@@ -1,0 +1,22 @@
+{
+  "kind": "MOCK_GTA_ARCHIVE",
+  "name": "vehicles.rpf",
+  "formatVersion": 1,
+  "entries": {
+    "x64/levels/gta5/vehicles/police.yft": {
+      "encoding": "utf8",
+      "data": "dummy-police-yft",
+      "size": 16
+    },
+    "x64/levels/gta5/vehicles/police_hi.yft": {
+      "encoding": "utf8",
+      "data": "dummy-police-hi-yft",
+      "size": 19
+    },
+    "x64/levels/gta5/vehicles/police.ytd": {
+      "encoding": "utf8",
+      "data": "dummy-police-ytd",
+      "size": 16
+    }
+  }
+}

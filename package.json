@@ -10,7 +10,9 @@
     "start": "electron .",
     "test": "node --test \"tests/**/*.test.js\"",
     "validate": "node scripts/validate-smart-install.js",
-    "verify": "node --test \"tests/**/*.test.js\" && node scripts/verify-launch.js"
+    "verify": "node --test \"tests/**/*.test.js\" && node scripts/verify-launch.js",
+    "verify:rpf-readonly": "node scripts/verify-rpf-readonly.js",
+    "verify:session-monitor": "node scripts/verify-session-monitor.js"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0"

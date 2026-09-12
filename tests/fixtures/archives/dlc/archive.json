@@ -1,0 +1,22 @@
+{
+  "kind": "MOCK_GTA_ARCHIVE",
+  "name": "dlc.rpf",
+  "formatVersion": 1,
+  "entries": {
+    "dlc/vehicles/police2.yft": {
+      "encoding": "utf8",
+      "data": "dummy-dlc-police2-yft",
+      "size": 22
+    },
+    "dlc/vehicles/police2.ytd": {
+      "encoding": "utf8",
+      "data": "dummy-dlc-police2-ytd",
+      "size": 22
+    },
+    "dlc/common/data/handling.meta": {
+      "encoding": "utf8",
+      "data": "dummy-handling-meta",
+      "size": 19
+    }
+  }
+}

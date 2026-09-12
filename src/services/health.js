@@ -70,7 +70,31 @@ function conflictChecks(sandboxPath) {
   ];
 }
 
-function runChecks(sandboxPath, officialPath) {
+function summarizeModCompatibility(dataDir) {
+  if (!dataDir) return null;
+  let mods = [];
+  try {
+    mods = require("./manifestStore").list(dataDir).filter((mod) => mod.enabled !== false);
+  } catch {
+    return null;
+  }
+  if (!mods.length) return null;
+  let verified = 0;
+  let unknown = 0;
+  let warning = 0;
+  let incompatible = 0;
+  for (const mod of mods) {
+    const status = String(mod.compatibilityStatus || mod.compatibility || "UNKNOWN").toUpperCase();
+    if (status === "VERIFIED" || status === "LIKELY_COMPATIBLE") verified += 1;
+    else if (status === "INCOMPATIBLE") incompatible += 1;
+    else if (status === "WARNING") warning += 1;
+    else unknown += 1;
+  }
+  const detail = `✓ ${verified} likely/verified · ⚠ ${unknown} unknown · ⚠ ${warning} warnings · ✕ ${incompatible} incompatible`;
+  return check("mod-compatibility", incompatible === 0, incompatible ? "warn" : "ok", "Mod compatibility", detail);
+}
+
+function runChecks(sandboxPath, officialPath, options = {}) {
   const checks = [];
   const mods = sandboxPath && exists(sandboxPath) ? enabledMods(sandboxPath) : [];
   const kinds = kindsFromMods(mods);
@@ -349,6 +373,9 @@ function runChecks(sandboxPath, officialPath) {
   }
 
   if (sandboxPath) checks.push(...conflictChecks(sandboxPath));
+
+  const compat = summarizeModCompatibility(options.dataDir || "");
+  if (compat) checks.push(compat);
 
   const last = summarizeCrash(sandboxPath);
   if (last) {
@@ -645,6 +672,7 @@ function withModStatus(sandboxPath, mods) {
 
 module.exports = {
   runChecks,
+  summarizeModCompatibility,
   collectReports,
   summarizeCrash,
   parseNewFindings,

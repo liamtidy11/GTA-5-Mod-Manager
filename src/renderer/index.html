@@ -23,9 +23,18 @@
         </div>
         <div class="top-meta">
           <span class="pill">GTA V Enhanced only</span>
-          <button id="btn-settings" class="ghost" type="button">Setup</button>
+          <button id="btn-settings" class="ghost" type="button" title="Folders and first-time setup">Setup</button>
         </div>
       </header>
+      <nav class="app-nav" aria-label="Main">
+        <button class="nav-btn is-active" data-page="dashboard" type="button">Dashboard</button>
+        <button class="nav-btn" data-page="mods" type="button">Mods</button>
+        <button class="nav-btn" data-page="profiles" type="button">Profiles</button>
+        <button class="nav-btn" data-page="recovery" type="button">Recovery</button>
+        <button class="nav-btn" data-page="sessions" type="button">Launch History</button>
+        <button class="nav-btn" data-page="diagnostics" type="button">Diagnostics</button>
+        <button class="nav-btn" data-page="prefs" type="button">Settings</button>
+      </nav>
 
       <main class="layout">
         <aside class="rail">
@@ -56,6 +65,37 @@
             <div class="row-actions">
               <button id="btn-tests" class="ghost" type="button">Run tests</button>
               <button id="btn-crashes" class="ghost" type="button">Crash reports</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="section-label">Last LSPDFR session</p>
+            <div class="health-line">
+              <i id="lamp-session" class="lamp"></i>
+              <div>
+                <strong id="label-session-result">No session yet</strong>
+                <small id="label-session-detail">Launch Duty to start recording evidence.</small>
+              </div>
+            </div>
+            <div id="retest-banner" class="retest-banner hidden"></div>
+            <div class="row-actions">
+              <button id="btn-sessions" class="ghost" type="button">Launch History</button>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="section-label">Active profile</p>
+            <div class="health-line">
+              <i id="lamp-profile" class="lamp"></i>
+              <div>
+                <strong id="label-profile-name">No profile yet</strong>
+                <small id="label-profile-detail">Profiles remember a Duty setup you can return to.</small>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button id="btn-profiles" class="ghost" type="button">Profiles</button>
+              <button id="btn-recovery" class="ghost" type="button">Recovery</button>
+              <button id="btn-known-good" class="ghost" type="button">Restore Known-Good Setup</button>
             </div>
           </section>
 
@@ -92,6 +132,51 @@
         </aside>
 
         <section class="workspace">
+          <section id="page-dashboard" class="dash-page">
+            <section class="card dash-grid">
+              <div>
+                <p class="section-label">Duty status</p>
+                <div class="health-line">
+                  <i id="dash-duty-lamp" class="lamp"></i>
+                  <div>
+                    <strong id="dash-duty-title">Not checked</strong>
+                    <small id="dash-duty-detail">Open the app after setup to see launch health.</small>
+                  </div>
+                </div>
+                <ul id="dash-duty-reasons" class="dash-reasons"></ul>
+              </div>
+              <div>
+                <p class="section-label">Active profile</p>
+                <strong id="dash-profile-name">None</strong>
+                <small id="dash-profile-detail">Create a profile from the current Duty setup.</small>
+              </div>
+              <div>
+                <p class="section-label">Last session</p>
+                <strong id="dash-session-title">No session yet</strong>
+                <small id="dash-session-detail">Launch Duty to start recording evidence.</small>
+              </div>
+              <div>
+                <p class="section-label">Mods</p>
+                <strong id="dash-mod-counts">0 enabled</strong>
+                <small id="dash-mod-health">No managed mods yet.</small>
+              </div>
+            </section>
+            <section class="card">
+              <p class="section-label">Attention</p>
+              <ul id="dash-alerts" class="dash-alerts"><li class="muted">Nothing needs attention.</li></ul>
+              <div class="row-actions">
+                <button id="btn-troubleshoot" type="button">Troubleshoot Duty</button>
+                <button id="btn-dash-tests" class="ghost" type="button">Run tests</button>
+              </div>
+            </section>
+            <section class="card">
+              <p class="section-label">Recent changes</p>
+              <ul id="dash-recent" class="dash-alerts"><li class="muted">No recent manager activity.</li></ul>
+              <p class="fineprint"><span id="dash-app-health">Mod Manager Health: Unknown</span></p>
+            </section>
+          </section>
+
+          <div id="page-mods" class="hidden">
           <div
             id="dropzone"
             class="dropzone"
@@ -133,6 +218,18 @@
               </div>
               <span id="smart-count" class="count">0</span>
             </div>
+            <div class="mods-toolbar">
+              <label class="sr-only" for="mod-search">Search mods</label>
+              <input id="mod-search" type="search" placeholder="Search name, DLL, alias…" autocomplete="off" />
+              <select id="mod-filter" aria-label="Filter mods">
+                <option value="">All</option>
+                <option value="ENABLED">Enabled</option>
+                <option value="DISABLED">Disabled</option>
+                <option value="WARNING">Warning</option>
+                <option value="BROKEN">Broken</option>
+                <option value="UNKNOWN">Unknown</option>
+              </select>
+            </div>
             <div id="smart-mod-list" class="mod-list">
               <p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>
             </div>
@@ -142,6 +239,7 @@
             <p class="section-label">Activity</p>
             <ol id="log" class="log"></ol>
           </section>
+          </div>
         </section>
       </main>
     </div>

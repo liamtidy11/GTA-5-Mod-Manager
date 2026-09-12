@@ -8,6 +8,7 @@ const {
   tactixDir,
   ENHANCED_EXE,
 } = require("./paths");
+const environmentInventory = require("./environmentInventory");
 
 async function create({ officialPath, sandboxPath, mode = "linked", onProgress }) {
   if (!isEnhancedFolder(officialPath)) {
@@ -77,6 +78,7 @@ async function create({ officialPath, sandboxPath, mode = "linked", onProgress }
     throw new Error("Sandbox was created but GTA5_Enhanced.exe is missing.");
   }
 
+  environmentInventory.invalidate({ dutyPath: sandboxPath });
   return {
     sandboxPath,
     fileCount: total,

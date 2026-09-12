@@ -12,6 +12,7 @@
   --ok: #7d9a6f;
   --warn: #c48a3a;
   --bad: #b45a4a;
+  --info: #6f8f9a;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
 }
 
@@ -575,6 +576,46 @@ h1 {
   line-height: 1.4;
 }
 
+.analysis-block {
+  margin: 16px 0 8px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--line);
+}
+
+.analysis-block h3 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tech-details {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tech-details summary {
+  cursor: pointer;
+  color: var(--brass);
+}
+
+.retest-banner {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.retest-banner.hidden,
+.hidden {
+  display: none;
+}
+
+.crash-actions {
+  margin-top: 10px;
+}
+
 .dialog.wide {
   width: min(760px, 100%);
 }
@@ -648,6 +689,54 @@ h1 {
   border-color: var(--bad);
 }
 
+.sev.info {
+  color: var(--info);
+  border-color: var(--info);
+}
+
+.lamp.grey {
+  background: var(--muted);
+}
+
+.rec-banner {
+  margin: 16px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.rec-banner .sev {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.vehicle-preview {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.diff-block {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.diff-block pre {
+  margin: 0;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  font-size: 11px;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -681,8 +770,130 @@ h1 {
   margin-left: 6px;
 }
 
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.session-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: inherit;
+  text-align: left;
+  padding: 10px 12px;
+}
+
+.session-row small {
+  display: block;
+  color: var(--muted);
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 28px 12px;
+}
+
+.nav-btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 2px;
+}
+
+.nav-btn.is-active,
+.nav-btn:focus-visible {
+  border-color: var(--brass);
+  color: var(--brass);
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.dash-page.hidden,
+#page-mods.hidden {
+  display: none;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.dash-grid strong,
+.mod h3 {
+  overflow-wrap: anywhere;
+}
+
+.dash-reasons,
+.dash-alerts {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.mods-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+
+.dialog input,
+.dialog textarea,
+.dialog select,
+.mods-toolbar input,
+.mods-toolbar select,
+.log-search {
+  flex: 1;
+  background: var(--bg-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.log-viewer {
+  max-height: 46vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 10px;
+  white-space: pre-wrap;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
 @media (max-width: 1100px) {
   .layout {
+    grid-template-columns: 1fr;
+  }
+  .dash-grid {
     grid-template-columns: 1fr;
   }
 }

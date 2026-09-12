@@ -66,11 +66,9 @@ test("a failed copy rolls back every change", async () => {
   writeFile(payload, "plugins/LSPDFR/B.dll", "B");
   try {
     const preview = await smartInstall.analyze({ source: payload, dutyPath: duty, dataDir, stagingRoot: staging });
-    // Sabotage one source file so the transaction fails mid-way.
-    fs.rmSync(path.join(preview.payloadRoot, "plugins", "LSPDFR", "B.dll"), { force: true });
 
     await assert.rejects(
-      () => smartInstall.commit({ preview, dutyPath: duty, dataDir }),
+      () => smartInstall.commit({ preview, dutyPath: duty, dataDir, hooks: { failAtCopy: 1 } }),
       /rolled back/i
     );
 
