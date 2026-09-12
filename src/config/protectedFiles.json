@@ -1,0 +1,113 @@
+{
+  "note": "Files the Smart Installer must never silently overwrite in the Duty folder. Generalizes the XInput/ASI-loader protection that keeps the working LSPDFR launch alive. Levels: critical (block or high-risk), warning (surface + confirm).",
+  "protected": [
+    {
+      "match": "xinput1_4.dll",
+      "matchType": "name",
+      "level": "critical",
+      "noShrink": true,
+      "owner": "ASI loader",
+      "note": "XInput1_4.dll is the Ultimate ASI Loader. Overwriting it with the small RPH hook copy stops DirectStorageFix and every ASI mod from loading."
+    },
+    {
+      "match": "dinput8.dll",
+      "matchType": "name",
+      "level": "critical",
+      "noShrink": true,
+      "owner": "ASI loader",
+      "note": "Alternate ASI loader. Do not replace it with a smaller hook DLL."
+    },
+    {
+      "match": "startup.rphs",
+      "matchType": "name",
+      "level": "critical",
+      "owner": "RAGE Plugin Hook",
+      "note": "Must stay LoadPlugin \"LSPD First Response.dll\". ReloadAllPlugins breaks LSPDFR on Enhanced."
+    },
+    {
+      "match": "ragepluginhook.exe",
+      "matchType": "name",
+      "level": "critical",
+      "owner": "RAGE Plugin Hook",
+      "note": "The hook host itself. Replacing it can break the working launch."
+    },
+    {
+      "match": "ragepluginhook.ini",
+      "matchType": "name",
+      "level": "warning",
+      "owner": "RAGE Plugin Hook",
+      "note": "PluginTimeoutThreshold must stay 60000 and ConsoleKey F4. RPH rejects other timeout values."
+    },
+    {
+      "match": "gta5_enhanced.exe",
+      "matchType": "name",
+      "level": "critical",
+      "owner": "Game",
+      "note": "The game executable. Never replace it."
+    },
+    {
+      "match": "gta5_enhanced_be.exe",
+      "matchType": "name",
+      "level": "warning",
+      "owner": "BattlEye",
+      "note": "BattlEye launcher. The manager parks this for Story Mode; a mod should not restore it."
+    },
+    {
+      "match": "playgtav.exe",
+      "matchType": "name",
+      "level": "critical",
+      "owner": "Game",
+      "note": "Steam launch shim required to keep Story Mode in the LSPDFR folder."
+    },
+    {
+      "match": "plugins/lspd first response.dll",
+      "matchType": "path",
+      "level": "critical",
+      "owner": "LSPDFR",
+      "note": "The LSPDFR plugin. Only an LSPDFR update should replace it, and it must stay inside Plugins\\."
+    },
+    {
+      "match": "commandline.txt",
+      "matchType": "name",
+      "level": "warning",
+      "owner": "BattlEye / Story Mode",
+      "note": "Holds -nobattleye. Losing it makes Story Mode mods crash."
+    },
+    {
+      "match": "steam_appid.txt",
+      "matchType": "name",
+      "level": "warning",
+      "owner": "Steam",
+      "note": "Must contain 3240220 (Enhanced)."
+    }
+  ],
+  "blockedIncoming": [
+    {
+      "match": "newtonsoft.json.dll",
+      "matchType": "name",
+      "note": "LSPDFR IL-merges JSON.NET. A loose Newtonsoft.Json.dll breaks the plugin load. Never install it."
+    }
+  ],
+  "riskyIncoming": [
+    {
+      "match": "scripthookv.dll",
+      "matchType": "name",
+      "note": "Script Hook V is parked on this setup because it crashes RAGE Plugin Hook on Enhanced. Installing it can break the launch."
+    },
+    {
+      "match": "scripthookvdotnet.asi",
+      "matchType": "name",
+      "note": "Script Hook V .NET is parked on this setup. Installing it can break the RPH launch on Enhanced."
+    },
+    {
+      "match": "scripthookvdotnet2.dll",
+      "matchType": "name",
+      "note": "Script Hook V .NET runtime. Parked on this setup."
+    },
+    {
+      "match": "scripthookvdotnet3.dll",
+      "matchType": "name",
+      "note": "Script Hook V .NET runtime. Parked on this setup."
+    }
+  ]
+}

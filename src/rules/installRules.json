@@ -1,0 +1,136 @@
+{
+  "note": "Rule-based classification + destination mapping for Smart Install v1. Rules are evaluated in order; the first match wins for each file. Paths use forward slashes and are relative to the Duty (LSPDFR) folder root. Focus for v1: LSPDFR plugins, RAGE plugins, simple root files, and config files.",
+  "version": 1,
+  "gamePrefixes": [
+    "plugins/",
+    "lspdfr/",
+    "scripts/",
+    "els/",
+    "lml/",
+    "mods/",
+    "update/",
+    "x64/",
+    "dlcpacks/",
+    "common/",
+    "audio/",
+    "ragdata/"
+  ],
+  "rules": [
+    {
+      "id": "structured-lspdfr-plugin",
+      "category": "LSPDFR_PLUGIN",
+      "confidence": 0.98,
+      "match": { "pathIncludes": ["plugins/lspdfr/"], "ext": [".dll"] },
+      "dest": { "keep": "fromSegment", "segment": "plugins" }
+    },
+    {
+      "id": "structured-plugins-tree",
+      "category": "LSPDFR_PLUGIN",
+      "confidence": 0.9,
+      "match": { "pathPrefix": ["plugins/"] },
+      "dest": { "keep": "path" }
+    },
+    {
+      "id": "structured-game-tree",
+      "category": "GAME_TREE",
+      "confidence": 0.85,
+      "match": {
+        "pathPrefix": [
+          "lspdfr/",
+          "scripts/",
+          "els/",
+          "lml/",
+          "mods/",
+          "update/",
+          "x64/",
+          "dlcpacks/",
+          "common/",
+          "audio/"
+        ]
+      },
+      "dest": { "keep": "path" }
+    },
+    {
+      "id": "loose-lspdfr-plugin",
+      "category": "LSPDFR_PLUGIN",
+      "confidence": 0.82,
+      "match": {
+        "ext": [".dll"],
+        "nameMatches": [
+          "lspdfr",
+          "callout",
+          "stoptheped",
+          "ultimatebackup",
+          "grammarpolice",
+          "arrestmanager",
+          "policesmartradio",
+          "computerplus",
+          "assaulteddetection",
+          "trafficpolicer"
+        ]
+      },
+      "dest": { "dir": "plugins/LSPDFR", "keep": "name" }
+    },
+    {
+      "id": "known-dependency-dll",
+      "category": "DEPENDENCY",
+      "confidence": 0.8,
+      "match": {
+        "ext": [".dll"],
+        "nameEquals": [
+          "ragenativeui.dll",
+          "rage.dll",
+          "lemonui.dll",
+          "lemonui.scripthookvdotnet3.dll",
+          "iplugin.dll"
+        ]
+      },
+      "dest": { "dir": "plugins/LSPDFR", "keep": "name" }
+    },
+    {
+      "id": "rage-plugin",
+      "category": "RAGE_PLUGIN",
+      "confidence": 0.78,
+      "match": { "ext": [".dll"], "atRoot": true, "hasSibling": ["ragepluginhook.exe"] },
+      "dest": { "dir": "plugins", "keep": "name" }
+    },
+    {
+      "id": "asi-script",
+      "category": "ASI",
+      "confidence": 0.9,
+      "match": { "ext": [".asi"] },
+      "dest": { "dir": "", "keep": "name" }
+    },
+    {
+      "id": "dotnet-script",
+      "category": "SCRIPT",
+      "confidence": 0.75,
+      "match": { "ext": [".cs", ".lua", ".vb", ".js"] },
+      "dest": { "dir": "scripts", "keep": "name" }
+    },
+    {
+      "id": "lspdfr-config",
+      "category": "CONFIG",
+      "confidence": 0.6,
+      "match": { "ext": [".ini", ".xml", ".json", ".meta"], "nameMatches": ["lspdfr", "callout", "wardrobe", "agency", "backup"] },
+      "dest": { "dir": "plugins/LSPDFR", "keep": "name" }
+    },
+    {
+      "id": "root-loader-dll",
+      "category": "ROOT_FILE",
+      "confidence": 0.55,
+      "match": { "ext": [".dll"], "atRoot": true, "nameEquals": ["xinput1_4.dll", "dinput8.dll", "openiv.asi"] },
+      "dest": { "dir": "", "keep": "name" }
+    }
+  ],
+  "fallback": {
+    "category": "UNKNOWN",
+    "confidence": 0.2,
+    "dest": { "keep": "path" }
+  },
+  "confidenceBands": [
+    { "min": 0.85, "mode": "AUTO", "label": "High confidence \u2014 safe to install automatically" },
+    { "min": 0.6, "mode": "CONFIRM", "label": "Medium confidence \u2014 review the preview before installing" },
+    { "min": 0.0, "mode": "MANUAL", "label": "Low confidence \u2014 manual placement recommended" }
+  ]
+}

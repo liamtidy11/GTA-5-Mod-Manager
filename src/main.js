@@ -5,6 +5,7 @@ const config = require("./services/config");
 const locator = require("./services/locator");
 const sandbox = require("./services/sandbox");
 const installer = require("./services/installer");
+const smartInstall = require("./services/smartInstall");
 const launcher = require("./services/launcher");
 const registry = require("./services/registry");
 const health = require("./services/health");
@@ -13,10 +14,20 @@ const { defaultSandboxPath, exists } = require("./services/paths");
 
 let win = null;
 const pendingPlans = new Map();
+const smartPlans = new Map();
 let logWatch = null;
 
 function userData() {
   return app.getPath("userData");
+}
+
+// Smart Install keeps its manifests/backups outside the clean Online install.
+function smartDataDir() {
+  return path.join(userData(), "data");
+}
+
+function smartStagingRoot() {
+  return path.join(userData(), "staging-smart");
 }
 
 function send(channel, payload) {
@@ -266,6 +277,95 @@ ipcMain.handle("mods:setEnabled", async (_event, { id, enabled }) => {
   await installer.setEnabled(cfg.sandboxPath, cfg.officialPath, id, enabled);
   log("ok", enabled ? "Mod enabled." : "Mod disabled.");
   return snapshot();
+});
+
+// ---- Smart Install v1 (additive; does not touch the working launch/install) ----
+
+ipcMain.handle("smart:analyze", async (_event, sourcePath) => {
+  const cfg = config.load(userData());
+  if (!cfg.sandboxPath) throw new Error("Finish setup before installing mods.");
+  const label = path.basename(sourcePath);
+  log("info", `Smart Install: analyzing ${label}…`);
+  const preview = await smartInstall.analyze({
+    source: sourcePath,
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+    stagingRoot: smartStagingRoot(),
+    officialPath: cfg.officialPath,
+    legacyOwnersOf: (destRel) => registry.ownersOf(cfg.sandboxPath, destRel),
+  });
+  smartPlans.set(preview.id, preview);
+  log(
+    "ok",
+    `Smart Install: ${preview.name} looks like ${preview.type} ` +
+      `(${Math.round(preview.confidence * 100)}% confidence). ` +
+      `${preview.counts.add} new, ${preview.counts.replace} replace, ${preview.counts.skip} skipped.`
+  );
+  if (preview.executables.length) {
+    log("warn", `Smart Install: this pack contains executables that will NOT be run: ${preview.executables.join(", ")}.`);
+  }
+  return preview;
+});
+
+ipcMain.handle("smart:commit", async (_event, planId) => {
+  const preview = smartPlans.get(planId);
+  if (!preview) throw new Error("That install preview expired. Drop the archive again.");
+  const cfg = config.load(userData());
+  log("info", `Smart Install: installing ${preview.name}…`);
+  try {
+    const manifest = await smartInstall.commit({
+      preview,
+      dutyPath: cfg.sandboxPath,
+      dataDir: smartDataDir(),
+      onProgress: (progress) => send("progress", progress),
+    });
+    smartPlans.delete(planId);
+    health.ensureNoBattlEye(cfg.sandboxPath);
+    log("ok", `Smart Install: installed ${manifest.name} (${manifest.files.length} files). BattlEye kept off for Story Mode.`);
+    const state = snapshot();
+    if (state.tests) {
+      log(state.tests.verdict === "blocked" ? "error" : state.tests.verdict === "caution" ? "warn" : "ok", state.tests.summary);
+    }
+    return { manifest, state };
+  } catch (error) {
+    smartPlans.delete(planId);
+    if (preview.stagingDir) await smartInstall.discardStaging(preview.stagingDir);
+    throw error;
+  }
+});
+
+ipcMain.handle("smart:cancel", async (_event, planId) => {
+  const preview = smartPlans.get(planId);
+  if (preview) {
+    if (preview.stagingDir) await smartInstall.discardStaging(preview.stagingDir);
+    smartPlans.delete(planId);
+  }
+  return true;
+});
+
+ipcMain.handle("smart:list", async () => smartInstall.list(smartDataDir()));
+
+ipcMain.handle("smart:uninstall", async (_event, modId) => {
+  const cfg = config.load(userData());
+  const result = await smartInstall.uninstall({
+    modId,
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+  });
+  log("ok", `Smart Install: removed mod (${result.restored} restored, ${result.removed} removed, ${result.kept} kept for other mods).`);
+  return { result, state: snapshot() };
+});
+
+ipcMain.handle("smart:setEnabled", async (_event, { id, enabled }) => {
+  const cfg = config.load(userData());
+  const manifest = await smartInstall.setEnabled({
+    modId: id,
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+    enabled,
+  });
+  log("ok", enabled ? "Smart Install: mod enabled." : "Smart Install: mod disabled.");
+  return { manifest, state: snapshot() };
 });
 
 function stopLogWatch() {
