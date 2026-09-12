@@ -1,0 +1,66 @@
+{
+  "note": "Knowledge base for drop-time dependency + compatibility checks. .NET plugin DLLs embed the names of assemblies they reference, so scanning a DLL's bytes for these tokens reliably detects what it needs. Kept deliberately small and accurate.",
+  "frameworks": [
+    {
+      "token": "RAGENativeUI",
+      "file": "RAGENativeUI.dll",
+      "name": "RAGENativeUI",
+      "level": "required",
+      "url": "https://www.lcpdfr.com/downloads/gta5mods/scripts/22447-ragenativeui/",
+      "note": "Menu framework used by many callouts and plugins."
+    },
+    {
+      "token": "LemonUI",
+      "file": "LemonUI.dll",
+      "name": "LemonUI",
+      "level": "required",
+      "url": "https://www.gta5-mods.com/tools/lemonui",
+      "note": "UI framework used by newer plugins."
+    },
+    {
+      "token": "iFruitAddon2",
+      "file": "iFruitAddon2.dll",
+      "name": "iFruitAddon2",
+      "level": "required",
+      "url": "https://www.gta5-mods.com/tools/ifruitaddon2-net-framework",
+      "note": "In-game phone contact framework."
+    }
+  ],
+  "risky": [
+    {
+      "token": "ScriptHookVDotNet",
+      "name": "Script Hook V .NET",
+      "level": "incompatible",
+      "note": "This mod depends on Script Hook V .NET, which is parked on this Enhanced setup because it crashes RAGE Plugin Hook. It will likely not load here."
+    }
+  ],
+  "structural": [
+    {
+      "id": "openiv-mods",
+      "when": "destPrefix",
+      "value": "mods/",
+      "requires": "OpenIV.asi",
+      "name": "OpenIV.asi",
+      "level": "warning",
+      "note": "Files target the mods\\ folder. OpenIV.asi must be installed or these replacements will not load."
+    },
+    {
+      "id": "lml-pack",
+      "when": "destPrefix",
+      "value": "lml/",
+      "requires": "lml.asi",
+      "name": "Lenny's Mod Loader",
+      "level": "warning",
+      "note": "This is a Lenny's Mod Loader package. LML must be installed in the LSPDFR folder for it to mount."
+    },
+    {
+      "id": "addon-dlc",
+      "when": "destContains",
+      "value": "dlcpacks/",
+      "requires": "HeapAdjuster.asi",
+      "name": "HeapAdjuster + raised gameconfig",
+      "level": "warning",
+      "note": "Add-on DLC packs usually need HeapAdjuster and a raised gameconfig, or the game can crash on load."
+    }
+  ]
+}

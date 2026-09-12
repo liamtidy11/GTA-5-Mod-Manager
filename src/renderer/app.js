@@ -476,8 +476,10 @@ function confirmSmartPreview(preview) {
     const blocked = sev === "BLOCKED";
     const conf = Math.round((preview.confidence || 0) * 100);
     const execs = preview.executables || [];
+    const deps = preview.dependencies || [];
+    const compat = preview.compatibility || [];
     const conflictItems = ((preview.conflicts && preview.conflicts.items) || []).filter(
-      (i) => i.level !== "NONE" && i.level !== "SAFE_REPLACEMENT"
+      (i) => i.level !== "NONE" && i.level !== "SAFE_REPLACEMENT" && i.code !== "dependency" && i.code !== "compatibility"
     );
 
     showOverlay(
@@ -510,6 +512,32 @@ function confirmSmartPreview(preview) {
         execs.length
           ? `<h3>Executables — never run automatically</h3><ul class="warnings">${execs
               .map((e) => `<li>${escapeHtml(e)}</li>`)
+              .join("")}</ul>`
+          : ""
+      }
+      ${
+        deps.length
+          ? `<h3>Dependencies</h3><ul class="check-list">${deps
+              .map(
+                (d) =>
+                  `<li><i class="lamp ${d.present ? "ok" : d.level === "required" ? "bad" : "warn"}"></i><div><strong>${escapeHtml(
+                    d.name
+                  )} — ${d.present ? "present" : "missing"}</strong><small>${escapeHtml(d.note || "")}${
+                    !d.present && d.url ? ` (${escapeHtml(d.url)})` : ""
+                  }</small></div></li>`
+              )
+              .join("")}</ul>`
+          : ""
+      }
+      ${
+        compat.length
+          ? `<h3>Compatibility</h3><ul class="check-list">${compat
+              .map(
+                (c) =>
+                  `<li><i class="lamp ${c.level === "incompatible" ? "bad" : "warn"}"></i><div><strong>${escapeHtml(
+                    c.name
+                  )}</strong><small>${escapeHtml(c.note || "")}</small></div></li>`
+              )
               .join("")}</ul>`
           : ""
       }

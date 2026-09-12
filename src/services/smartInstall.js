@@ -4,6 +4,7 @@ const { exists, safeJoin, isEnhancedFolder } = require("./paths");
 const modScanner = require("./modScanner");
 const modClassifier = require("./modClassifier");
 const conflictDetector = require("./conflictDetector");
+const dependencyChecker = require("./dependencyChecker");
 const archiveSecurity = require("./archiveSecurity");
 const manifestStore = require("./manifestStore");
 const backupManager = require("./backupManager");
@@ -151,6 +152,19 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     });
   }
 
+  // Drop-time dependency + compatibility checks (byte-scan of plugin DLLs).
+  const deps = dependencyChecker.check({ files, payloadRoot: scan.root, dutyPath });
+  for (const dep of deps.dependencies) {
+    if (dep.present) continue;
+    severity = conflictDetector.maxSeverity(severity, dep.level === "required" ? "WARNING" : "WARNING");
+    items.push({ level: "WARNING", code: "dependency", message: `Missing dependency: ${dep.note}`, files: [] });
+  }
+  for (const compat of deps.compatibility) {
+    const level = compat.level === "incompatible" ? "HIGH_RISK" : "WARNING";
+    severity = conflictDetector.maxSeverity(severity, level);
+    items.push({ level, code: "compatibility", message: compat.note, files: [] });
+  }
+
   const counts = {
     add: files.filter((f) => f.action === "add").length,
     replace: files.filter((f) => f.action === "replace").length,
@@ -174,6 +188,8 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     counts,
     conflicts: { severity, items },
     executables: security.executables,
+    dependencies: deps.dependencies,
+    compatibility: deps.compatibility,
     files,
   };
 }
