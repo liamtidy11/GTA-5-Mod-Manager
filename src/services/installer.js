@@ -550,4 +550,4 @@ async function discardStaging(extractDir) {
   }
 }
 
-module.exports = { analyze, commit, uninstall, setEnabled, discardStaging, repairLspdfrLayout };
+module.exports = { analyze, commit, uninstall, setEnabled, discardStaging, repairLspdfrLayout, extractArchive };

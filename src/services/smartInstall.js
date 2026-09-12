@@ -86,7 +86,11 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
 
   const classification = modClassifier.classify(scan);
 
-  const copies = classification.perFile.map((item) => ({
+  // Executables are never installed or run. We surface them and skip them.
+  const executableItems = classification.perFile.filter((item) => archiveSecurity.isExecutable(item.rel));
+  const installableItems = classification.perFile.filter((item) => !archiveSecurity.isExecutable(item.rel));
+
+  const copies = installableItems.map((item) => ({
     rel: item.rel,
     destination: item.destination,
     category: item.category,
@@ -118,6 +122,35 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     };
   });
 
+  // Append executables to the plan as explicit, non-installed skips.
+  for (const item of executableItems) {
+    files.push({
+      source: item.rel,
+      destination: item.destination,
+      category: "EXECUTABLE",
+      confidence: 0,
+      size: item.size,
+      action: "skip",
+      severity: "WARNING",
+      reason: "Executable — surfaced for review, never installed or run.",
+    });
+  }
+
+  // Overall severity + attention items include the surfaced executables.
+  const items = [...conflicts.items];
+  let severity = conflicts.severity;
+  if (executableItems.length) {
+    severity = conflictDetector.maxSeverity(severity, "WARNING");
+    items.push({
+      level: "WARNING",
+      code: "executables",
+      message: `${executableItems.length} executable file(s) will not be installed or run: ${executableItems
+        .map((e) => e.rel)
+        .join(", ")}.`,
+      files: executableItems.map((e) => e.rel),
+    });
+  }
+
   const counts = {
     add: files.filter((f) => f.action === "add").length,
     replace: files.filter((f) => f.action === "replace").length,
@@ -139,7 +172,7 @@ async function analyze({ source, dutyPath, dataDir, stagingRoot, officialPath = 
     unknownCount: classification.unknownCount,
     usableCount: classification.usableCount,
     counts,
-    conflicts: { severity: conflicts.severity, items: conflicts.items },
+    conflicts: { severity, items },
     executables: security.executables,
     files,
   };
