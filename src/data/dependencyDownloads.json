@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "note": "Curated official sources only. Never auto-download. Duty folder only. Script Hook V / SHVDN are never offered.",
+  "blockedIds": ["scripthookv", "scripthookvdotnet"],
+  "items": [
+    {
+      "id": "ragenativeui",
+      "name": "RAGENativeUI",
+      "aliases": ["rage native ui", "ragenativeui.dll"],
+      "githubRepo": "alexguirre/RAGENativeUI",
+      "assetPattern": "^RAGENativeUI\\.zip$",
+      "downloadUrl": "https://github.com/alexguirre/RAGENativeUI/releases/latest/download/RAGENativeUI.zip",
+      "pageUrl": "https://github.com/alexguirre/RAGENativeUI/releases/latest",
+      "sourceLabel": "Official GitHub release (alexguirre/RAGENativeUI)",
+      "note": "Installs RAGENativeUI.dll into the Duty game folder, next to RagePluginHook.exe.",
+      "keepFiles": ["RAGENativeUI.dll"]
+    },
+    {
+      "id": "lemonui",
+      "name": "LemonUI",
+      "aliases": ["lemon ui", "lemonui.ragepluginhook", "lemonui.dll"],
+      "githubRepo": "LemonUIbyLemon/LemonUI",
+      "assetPattern": "^LemonUI\\.zip$",
+      "downloadUrl": "https://github.com/LemonUIbyLemon/LemonUI/releases/latest/download/LemonUI.zip",
+      "pageUrl": "https://github.com/LemonUIbyLemon/LemonUI/releases/latest",
+      "sourceLabel": "Official GitHub release (LemonUIbyLemon/LemonUI)",
+      "note": "Keeps only the RagePluginHook LemonUI files. Script Hook V .NET copies in that zip are discarded.",
+      "keepFiles": ["LemonUI.dll", "LemonUI.RagePluginHook.dll"]
+    },
+    {
+      "id": "ifruitaddon2",
+      "name": "iFruitAddon2",
+      "aliases": ["ifruit addon 2", "ifruitaddon2.dll"],
+      "githubRepo": "Bob74/iFruitAddon2",
+      "assetPattern": "^iFruitAddon2.*\\.zip$",
+      "pageUrl": "https://github.com/Bob74/iFruitAddon2/releases/latest",
+      "sourceLabel": "Official GitHub release (Bob74/iFruitAddon2)",
+      "note": "Installs iFruitAddon2.dll into the Duty game folder.",
+      "keepFiles": ["iFruitAddon2.dll"]
+    },
+    {
+      "id": "damage-tracker-framework",
+      "name": "Damage Tracker Framework",
+      "aliases": ["damagetrackerframework", "dtf", "damage tracker"],
+      "pageUrl": "https://www.lcpdfr.com/downloads/gta5mods/scripts/42767-damage-tracker-framework/",
+      "sourceLabel": "LCPDFR.com (login required)",
+      "note": "The author hosts this on LCPDFR.com, not a public GitHub zip. Open the page, download it, then drop the zip on Smart Install.",
+      "keepFiles": ["DamageTrackerFramework.dll", "DamageTrackingFramework.dll", "DamageTrackerLib.dll"]
+    }
+  ]
+}

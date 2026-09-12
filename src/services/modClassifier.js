@@ -6,6 +6,8 @@ const path = require("path");
 // matching rule to assign a category, a destination inside the Duty folder,
 // and a per-file confidence. Also aggregates an overall category + confidence.
 
+const { stripGameWrapperPrefix } = require("./knowledge/gameTreeNormalize");
+
 const DEFAULT_RULES = path.join(__dirname, "..", "rules", "installRules.json");
 
 let cachedRules = null;
@@ -47,7 +49,7 @@ function matchesRule(rule, file, context) {
 
 function resolveDest(rule, file) {
   const dest = rule.dest || { keep: "path" };
-  const rel = normSlash(file.rel);
+  const rel = stripGameWrapperPrefix(file.rel);
   const parts = rel.split("/");
 
   if (dest.keep === "path") return rel;
@@ -86,7 +88,8 @@ function classify(scan, rulesPath = DEFAULT_RULES) {
   let confidenceSum = 0;
   let unknownCount = 0;
 
-  for (const file of scan.usableFiles || []) {
+  for (const raw of scan.usableFiles || []) {
+    const file = { ...raw, rel: stripGameWrapperPrefix(raw.rel) };
     let matched = null;
     for (const rule of rules.rules || []) {
       if (matchesRule(rule, file, context)) {

@@ -462,50 +462,98 @@ h1 {
 }
 
 .workspace {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   min-height: 0;
+  height: 100%;
+}
+
+.mods-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .dropzone {
-  border: 1px solid var(--line-strong);
-  background: var(--panel);
-  min-height: 196px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  padding: 36px 32px;
-  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  text-align: left;
+  padding: 16px 22px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  border-radius: 0;
+  min-height: 0;
 }
 
-.dropzone h2 {
-  margin: 8px 0 10px;
-  font-family: var(--font-display);
-  font-size: 34px;
-  font-weight: 400;
-  letter-spacing: -0.025em;
+.dropzone-copy {
+  min-width: 12rem;
+  flex: 1 1 220px;
 }
 
-.dropzone p {
-  margin: 0 0 18px;
+.dropzone-copy strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dropzone-copy span {
+  display: block;
+  margin-top: 3px;
   color: var(--muted);
-  max-width: 44ch;
-  margin-left: auto;
-  margin-right: auto;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
-.drop-kicker {
-  color: var(--muted);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  font-size: 10px;
+.drop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
 }
 
 .dropzone.drag {
-  background: var(--panel-elevated);
+  background: var(--hover);
   border-color: var(--ink);
+}
+
+.mods-switch {
+  display: flex;
+  gap: 22px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mods-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 13px 0 11px;
+  border-radius: 0;
+  font-size: 13px;
+}
+
+.mods-switch button:hover {
+  background: transparent;
+  color: var(--ink);
+}
+
+.mods-switch button.is-active {
+  color: var(--ink);
+  box-shadow: inset 0 -1px 0 var(--ink);
+}
+
+.mods-panel {
+  padding: 4px 8px 8px;
+  min-height: 0;
 }
 
 .mods-card,
@@ -516,14 +564,19 @@ h1 {
 .mods-card {
   display: flex;
   flex-direction: column;
+  padding: 22px;
+}
+
+.log-card {
+  padding: 20px 22px;
 }
 
 .mods-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .mods-head .section-label {
@@ -531,33 +584,39 @@ h1 {
 }
 
 .mods-sub {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 13px;
   letter-spacing: 0;
   text-transform: none;
-  line-height: 1.5;
+  line-height: 1.55;
+  max-width: 62ch;
 }
 
 .count {
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   padding: 0;
   border: 0;
   background: none;
+  flex-shrink: 0;
+}
+
+.mods-switch .count {
+  margin-left: 6px;
 }
 
 .mod-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   flex: 1;
-  min-height: 280px;
-  max-height: 520px;
-  overflow: auto;
-  padding-right: 4px;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
 }
 
 .mod-list::-webkit-scrollbar,
@@ -574,24 +633,23 @@ h1 {
 }
 
 .mod-type {
-  border: 1px solid var(--line);
+  border: 0;
   background: transparent;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  padding: 4px 0 8px;
 }
 
-.mod-type.is-empty {
-  opacity: 0.7;
+.mod-type + .mod-type {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
 }
 
 .mod-type-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--hover);
+  padding: 8px 14px 4px;
 }
 
 .mod-type-head h3 {
@@ -599,42 +657,41 @@ h1 {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink);
   font-weight: 600;
-}
-
-.mod-type-head p {
-  margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .mod-type-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
 }
 
 .mod {
   display: grid;
-  grid-template-columns: 7px 1fr auto;
-  gap: 12px;
-  align-items: start;
-  padding: 14px 14px;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 12px 14px;
+  align-items: center;
+  padding: 12px 14px;
   background: transparent;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.mod:last-child {
+  border-bottom: 0;
 }
 
 .mod:hover {
-  border-color: var(--line-strong);
   background: var(--hover);
 }
 
 .mod .lamp {
-  margin-top: 6px;
+  margin-top: 0;
+}
+
+.mod-main {
+  min-width: 0;
 }
 
 .mod-state {
@@ -642,21 +699,25 @@ h1 {
 }
 
 .mod h3 {
-  margin: 0 0 4px;
-  font-size: 15px;
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
 .mod p {
-  margin: 0;
+  margin: 3px 0 0;
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.4;
+}
+
+.mod p + p {
+  margin-top: 3px;
 }
 
 .mod.disabled {
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .mod-actions {
@@ -665,6 +726,8 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+  grid-column: auto;
+  padding-top: 0;
 }
 
 .mod-actions button {
@@ -672,7 +735,7 @@ h1 {
   border: 1px solid var(--line-strong);
   background: transparent;
   color: var(--text);
-  padding: 7px 10px;
+  padding: 8px 12px;
   font-size: 12px;
 }
 
@@ -687,23 +750,77 @@ h1 {
 
 .empty {
   color: var(--muted);
-  margin: 8px 0 0;
+  margin: 18px 14px;
+  line-height: 1.5;
+}
+
+.mods-log {
+  border-top: 1px solid var(--line);
+  padding: 14px 22px 16px;
+}
+
+.keybind-list {
+  list-style: none;
+  margin: 8px 0 16px;
+  padding: 0;
+}
+
+.keybind-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 12px 16px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.keybind-row kbd {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--code-bg);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.keybind-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.guide-steps {
+  margin: 8px 0 12px;
+  padding-left: 20px;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.guide-steps li {
+  margin: 0 0 8px;
+}
+
+.mods-log .section-label {
+  margin-bottom: 6px;
 }
 
 .log {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 140px;
+  max-height: 112px;
   overflow: auto;
   font-size: 12px;
   font-family: var(--font-mono);
 }
 
 .log li {
-  padding: 6px 0;
+  padding: 5px 0;
   color: var(--muted);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
 }
 
 .log li.ok {
@@ -917,6 +1034,18 @@ h1 {
   line-height: 1.4;
 }
 
+.dep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dep-actions button {
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
 .analysis-block {
   margin: 16px 0 8px;
   padding: 12px 0 4px;
@@ -990,10 +1119,11 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin: 0 0 0 6px;
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .smart-toggle input {
@@ -1003,7 +1133,7 @@ h1 {
 
 .smart-card .mod-list {
   min-height: 0;
-  max-height: 280px;
+  max-height: none;
 }
 
 .dialog h3 {
@@ -1219,8 +1349,18 @@ h1 {
 #page-mods {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  flex: 1;
+  gap: 0;
   min-height: 0;
+}
+
+#page-mods .mods-page {
+  flex: 1;
+}
+
+#page-mods .mods-panel:not(.hidden) {
+  flex: 1;
+  overflow: auto;
 }
 
 .dash-grid {
@@ -1280,8 +1420,17 @@ h1 {
 
 .mods-toolbar {
   display: flex;
-  gap: 8px;
-  padding: 0 0 12px;
+  gap: 10px;
+  padding: 10px 14px 6px;
+  margin: 0;
+}
+
+.mods-toolbar input {
+  flex: 1 1 auto;
+}
+
+.mods-toolbar select {
+  flex: 0 0 168px;
 }
 
 .dialog input,
@@ -1388,5 +1537,14 @@ h1 {
 
   .dash-grid > div:last-child {
     border-bottom: 0;
+  }
+
+  .mod {
+    grid-template-columns: 8px minmax(0, 1fr);
+  }
+
+  .mod-actions {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 }

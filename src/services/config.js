@@ -18,6 +18,10 @@ const DEFAULTS = {
   lastPage: "dashboard",
   developerMode: false,
   theme: "dark",
+  lookupInstallGuides: true,
+  aiGuideEnabled: false,
+  aiApiKey: "",
+  aiApiUrl: "",
 };
 
 function configPath(userData) {

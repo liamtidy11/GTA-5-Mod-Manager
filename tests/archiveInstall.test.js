@@ -52,7 +52,7 @@ test("a real .zip archive installs and uninstalls cleanly", { skip }, async () =
 
     const manifest = await smartInstall.commit({ preview, dutyPath: duty, dataDir });
     assert.equal(fileExists(duty, "plugins/LSPDFR/MyCallout.dll"), true);
-    assert.equal(fileExists(duty, "plugins/LSPDFR/RAGENativeUI.dll"), true);
+    assert.equal(fileExists(duty, "RAGENativeUI.dll"), true);
     assert.equal(fileExists(duty, "install.bat"), false, "executable must not be written to Duty");
 
     await smartInstall.uninstall({ modId: manifest.id, dutyPath: duty, dataDir });

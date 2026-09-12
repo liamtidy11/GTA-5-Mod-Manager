@@ -190,7 +190,7 @@ function planForSession(ctx) {
             targetName: suspect.name,
             reversible: false,
             changes: [`Open details for missing dependency ${suspect.name}`],
-            note: "V4C will not download dependencies.",
+            note: "Use Smart Install to download curated official zips, or drop the pack yourself.",
           })
         );
       }

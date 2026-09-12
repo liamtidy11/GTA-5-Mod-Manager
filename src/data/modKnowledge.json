@@ -169,7 +169,7 @@
       "authors": [],
       "category": "DEPENDENCY",
       "recognition": {
-        "dllNames": ["LemonUI.dll"],
+        "dllNames": ["LemonUI.dll", "LemonUI.RagePluginHook.dll"],
         "archivePatterns": ["lemonui"],
         "folderPatterns": [],
         "configNames": [],
@@ -221,6 +221,55 @@
       "incompatibleWith": [],
       "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
       "notes": []
+    },
+    {
+      "id": "damage-tracker-framework",
+      "name": "Damage Tracker Framework",
+      "aliases": ["DamageTrackerFramework", "DamageTrackingFramework", "DTF"],
+      "authors": [],
+      "category": "DEPENDENCY",
+      "recognition": {
+        "dllNames": ["DamageTrackerFramework.dll", "DamageTrackingFramework.dll", "DamageTrackerLib.dll", "DamageTracker.dll"],
+        "archivePatterns": ["damagetrackerframework", "damage-tracker"],
+        "folderPatterns": [],
+        "configNames": [],
+        "readmeTerms": ["damage tracker framework"]
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "policing-redefined",
+      "name": "Policing Redefined",
+      "aliases": ["PolicingRedefined", "PR"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["PolicingRedefined.dll"],
+        "archivePatterns": ["policingredefined", "policing-redefined"],
+        "folderPatterns": ["plugins/LSPDFR/PolicingRedefined", "plugins/LSPDFR/Policing Redefined"],
+        "configNames": [],
+        "readmeTerms": ["policing redefined"]
+      },
+      "dependencies": [
+        { "modId": "ragenativeui", "kind": "REQUIRED", "notes": "Required by Policing Redefined." },
+        { "modId": "damage-tracker-framework", "kind": "REQUIRED", "notes": "Required by Policing Redefined." }
+      ],
+      "optionalDependencies": [],
+      "conflicts": [
+        { "modId": "stop-the-ped", "severity": "HIGH", "reason": "Usually not used together with Policing Redefined." },
+        { "modId": "ultimate-backup", "severity": "HIGH", "reason": "Usually not used together with Policing Redefined." }
+      ],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": [
+        "Install from the pack GTAV MAIN DIRECTORY folder into Duty only.",
+        "Empty Settings folder until you go on duty is normal."
+      ]
     },
     {
       "id": "stop-the-ped",

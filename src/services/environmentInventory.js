@@ -73,8 +73,14 @@ const CORE_COMPONENTS = [
 
 const FRAMEWORK_FILES = [
   { id: "ragenativeui", name: "RAGENativeUI", file: "RAGENativeUI.dll" },
-  { id: "lemonui", name: "LemonUI", file: "LemonUI.dll" },
+  { id: "lemonui", name: "LemonUI", file: "LemonUI.dll", files: ["LemonUI.dll", "LemonUI.RagePluginHook.dll"] },
   { id: "ifruitaddon2", name: "iFruitAddon2", file: "iFruitAddon2.dll" },
+  {
+    id: "damage-tracker-framework",
+    name: "Damage Tracker Framework",
+    file: "DamageTrackerFramework.dll",
+    files: ["DamageTrackerFramework.dll", "DamageTrackingFramework.dll", "DamageTrackerLib.dll"],
+  },
 ];
 
 const PLUGIN_ROOT_SKIP = new Set([
@@ -82,6 +88,8 @@ const PLUGIN_ROOT_SKIP = new Set([
   "lspd first response.dll.config",
   "lspd first response.pdb",
   "lspdfr.dll",
+  "damagetrackerframework.dll",
+  "damagetrackingframework.dll",
 ]);
 
 const cache = new Map();
@@ -232,6 +240,10 @@ function describeComponent(dutyPath, component, parkedFiles, dataDir) {
   };
 }
 
+function frameworkFileNames(fw) {
+  return [...new Set([fw.file, ...((fw && fw.files) || [])].filter(Boolean))];
+}
+
 function scanFrameworks(dutyPath) {
   const searchDirs = dutyPath
     ? [dutyPath, path.join(dutyPath, "plugins"), path.join(dutyPath, "plugins", "LSPDFR")]
@@ -240,13 +252,16 @@ function scanFrameworks(dutyPath) {
   for (const fw of FRAMEWORK_FILES) {
     let present = false;
     let filePath = null;
-    for (const dir of searchDirs) {
-      const abs = path.join(dir, fw.file);
-      if (exists(abs)) {
-        present = true;
-        filePath = path.relative(dutyPath, abs).replace(/\\/g, "/");
-        break;
+    for (const name of frameworkFileNames(fw)) {
+      for (const dir of searchDirs) {
+        const abs = path.join(dir, name);
+        if (exists(abs)) {
+          present = true;
+          filePath = path.relative(dutyPath, abs).replace(/\\/g, "/");
+          break;
+        }
       }
+      if (present) break;
     }
     if (!present) continue;
     found.push({

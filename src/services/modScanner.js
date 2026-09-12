@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { isJunk } = require("./modtypes");
+const { isGameTreeDirName } = require("./knowledge/gameTreeNormalize");
 
 // Scans a staged (already extracted) folder and produces a structured picture
 // of its contents for the classifier and conflict detector. Read-only.
@@ -53,6 +54,11 @@ function collapseSingleRoot(root) {
   return current;
 }
 
+function preferGameTree(root) {
+  const hint = listDir(root).find((entry) => entry.isDirectory() && isGameTreeDirName(entry.name));
+  return hint ? path.join(root, hint.name) : root;
+}
+
 function walk(root) {
   const out = [];
   const stack = [root];
@@ -84,11 +90,22 @@ function readReadme(root, files) {
   }
 }
 
+function readReadmeInDir(dir) {
+  const hit = listDir(dir).find((entry) => entry.isFile() && README_RE.test(entry.name) && /\.(txt|md|rtf|nfo)$/i.test(entry.name));
+  if (!hit) return "";
+  try {
+    return fs.readFileSync(path.join(dir, hit.name), "utf8").slice(0, 20000);
+  } catch {
+    return "";
+  }
+}
+
 // Scans a folder. Returns:
 //   { root, files:[{rel,base,ext,size,junk}], usableFiles, readmeText,
 //     extensions:[...], isFullGame, empty }
 function scan(folderPath) {
-  const root = collapseSingleRoot(folderPath);
+  const collapsed = collapseSingleRoot(folderPath);
+  const root = preferGameTree(collapsed);
   const absFiles = walk(root);
   const files = absFiles.map((abs) => {
     const rel = normSlash(path.relative(root, abs));
@@ -110,16 +127,19 @@ function scan(folderPath) {
   const usableFiles = files.filter((f) => !f.junk);
   const extensions = [...new Set(files.map((f) => f.ext).filter(Boolean))];
   const isFullGame = files.some((f) => FULL_GAME_MARKERS.includes(f.base.toLowerCase()));
+  const readmeText = [readReadmeInDir(folderPath), readReadmeInDir(collapsed), readReadmeInDir(path.dirname(root)), readReadme(root, files)]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     root,
     files,
     usableFiles,
-    readmeText: readReadme(root, files),
+    readmeText,
     extensions,
     isFullGame,
     empty: usableFiles.length === 0,
   };
 }
 
-module.exports = { scan, collapseSingleRoot, normSlash };
+module.exports = { scan, collapseSingleRoot, preferGameTree, normSlash };

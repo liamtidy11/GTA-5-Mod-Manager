@@ -66,10 +66,38 @@
           "policesmartradio",
           "computerplus",
           "assaulteddetection",
-          "trafficpolicer"
+          "trafficpolicer",
+          "policingredefined",
+          "policing-redefined"
         ]
       },
       "dest": { "dir": "plugins/LSPDFR", "keep": "name" }
+    },
+    {
+      "id": "support-dll-game-root",
+      "category": "DEPENDENCY",
+      "confidence": 0.92,
+      "match": {
+        "ext": [".dll"],
+        "nameEquals": [
+          "ragenativeui.dll",
+          "lemonui.dll",
+          "lemonui.ragepluginhook.dll",
+          "ifruitaddon2.dll",
+          "damagetrackerlib.dll"
+        ]
+      },
+      "dest": { "dir": "", "keep": "name" }
+    },
+    {
+      "id": "damage-tracker-rph-plugin",
+      "category": "RAGE_PLUGIN",
+      "confidence": 0.9,
+      "match": {
+        "ext": [".dll"],
+        "nameEquals": ["damagetrackerframework.dll", "damagetrackingframework.dll"]
+      },
+      "dest": { "dir": "plugins", "keep": "name" }
     },
     {
       "id": "known-dependency-dll",

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "note": "Personal install notes for Duty / LSPDFR only. Never used to write the official Online folder.",
+  "guides": [
+    {
+      "id": "policing-redefined",
+      "title": "Policing Redefined",
+      "aliases": ["policing redefined", "policingredefined", "pr"],
+      "sources": ["https://policing-redefined.netlify.app/"],
+      "needs": ["ragenativeui", "damage-tracker-framework"],
+      "conflicts": ["stop-the-ped", "ultimate-backup"],
+      "steps": [
+        "Install into the Duty LSPDFR folder only — never the official Steam / Online folder.",
+        "Use the files inside the pack’s “GTAV MAIN DIRECTORY” folder. That folder is the game root (next to RagePluginHook.exe).",
+        "The plugin belongs under Plugins\\LSPDFR\\.",
+        "Install RageNativeUI first if it is not already in Duty.",
+        "Install Damage Tracker Framework first if it is not already in Duty.",
+        "Do not run Stop The Ped and Ultimate Backup together with Policing Redefined unless you know they work together.",
+        "An empty Settings folder after install is normal. Go on duty once so Policing Redefined can create its files."
+      ]
+    },
+    {
+      "id": "stop-the-ped",
+      "title": "Stop The Ped",
+      "aliases": ["stop the ped", "stoptheped", "stp"],
+      "sources": [],
+      "needs": ["ragenativeui"],
+      "conflicts": ["policing-redefined"],
+      "steps": [
+        "Install into the Duty LSPDFR folder only.",
+        "Put StopThePed.dll under Plugins\\LSPDFR\\.",
+        "Install RageNativeUI if it is missing.",
+        "Do not stack this with Policing Redefined unless you know they are compatible."
+      ]
+    },
+    {
+      "id": "ultimate-backup",
+      "title": "Ultimate Backup",
+      "aliases": ["ultimate backup", "ultimatebackup"],
+      "sources": [],
+      "needs": ["ragenativeui"],
+      "conflicts": ["policing-redefined"],
+      "steps": [
+        "Install into the Duty LSPDFR folder only.",
+        "Put UltimateBackup.dll under Plugins\\LSPDFR\\.",
+        "Install RageNativeUI if it is missing.",
+        "Do not stack this with Policing Redefined unless you know they are compatible."
+      ]
+    },
+    {
+      "id": "ragenativeui",
+      "title": "RAGENativeUI",
+      "aliases": ["rage native ui", "ragenativeui"],
+      "sources": [],
+      "needs": [],
+      "conflicts": [],
+      "steps": [
+        "Install into the Duty folder, next to RagePluginHook.exe — not the official Steam / Online folder.",
+        "RAGENativeUI.dll belongs in the Duty game root (this manager can download the official GitHub zip when you confirm).",
+        "Many LSPDFR plugins expect RAGENativeUI.dll to already be present before you go on duty."
+      ]
+    },
+    {
+      "id": "damage-tracker-framework",
+      "title": "Damage Tracker Framework",
+      "aliases": ["damage tracker", "damagetrackerframework", "dtf"],
+      "sources": ["https://www.lcpdfr.com/downloads/gta5mods/scripts/42767-damage-tracker-framework/"],
+      "needs": [],
+      "conflicts": [],
+      "steps": [
+        "The author hosts this on LCPDFR.com (login required). This manager cannot fetch that zip for you.",
+        "Download it yourself, then drop the zip on Smart Install — Duty folder only.",
+        "DamageTrackerLib.dll goes next to RagePluginHook.exe. DamageTrackerFramework.dll goes in Plugins\\ so RAGE Plugin Hook can start it.",
+        "Policing Redefined needs this running before you go on duty."
+      ]
+    }
+  ]
+}

@@ -83,13 +83,23 @@ function evaluateModHealth(mod = {}, context = {}) {
     reasons.push("A required dependency is missing, disabled, or too old.");
   }
 
+  const runtime = context.runtime || null;
+  const runtimeWorked = runtime && runtime.status === "WORKED";
+  const runtimeFailed = runtime && runtime.status === "FAILED";
+
   const compat = String(mod.compatibilityStatus || mod.compatibility || "UNKNOWN").toUpperCase();
   if (compat === "INCOMPATIBLE") {
     reasons.push("Trusted data records this mod as incompatible with GTA V Enhanced.");
-    return { installId, status: STATES.BROKEN, reasons, crash, profiles };
+    return { installId, status: STATES.BROKEN, reasons, crash, profiles, runtime };
   }
   if (compat === "WARNING") reasons.push("A compatibility warning applies to this mod.");
-  else if (compat === "UNKNOWN") reasons.push("Compatibility with this Duty setup is unknown.");
+  else if (compat === "UNKNOWN" && !runtimeWorked && !runtimeFailed) {
+    reasons.push("Compatibility with this Duty setup is unknown.");
+  }
+
+  if (runtimeFailed) {
+    reasons.push(runtime.evidence || "The last Duty session showed this plugin failed to stay loaded.");
+  }
 
   if (crash.level === "HIGH" || crash.level === "MEDIUM") {
     reasons.push(`${crash.failed} failed and ${crash.clean} clean sessions ran with this mod enabled (correlation, not proof).`);
@@ -100,10 +110,18 @@ function evaluateModHealth(mod = {}, context = {}) {
   else if (reasons.length) status = STATES.WARNING;
 
   if (status === STATES.HEALTHY) {
-    reasons.push("Manifest valid, files present, no blocking issues.");
+    if (runtimeWorked) {
+      reasons.push(
+        runtime.kind === "SESSION_PRESENT"
+          ? runtime.evidence || "This install was enabled during a clean Duty session."
+          : runtime.evidence || "This install loaded in a local Duty session."
+      );
+    } else {
+      reasons.push("Manifest valid, files present, no blocking issues.");
+    }
   }
 
-  return { installId, status, reasons, crash, profiles };
+  return { installId, status, reasons, crash, profiles, runtime };
 }
 
 function summarizeCounts(healthList = []) {

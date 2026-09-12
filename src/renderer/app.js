@@ -114,6 +114,18 @@ const KIND_LABELS = {
   lml: "Lenny's Mod Loader",
 };
 
+const SMART_SECTIONS = [
+  { id: "lspdfr", title: "LSPDFR plugins", match: ["lspdfr_plugin", "lspdfr"] },
+  { id: "rage", title: "Rage Plugin Hook", match: ["rage_plugin", "rage"] },
+  { id: "script", title: "Scripts / ASI", match: ["asi", "script"] },
+  { id: "dependency", title: "Dependencies", match: ["dependency"] },
+  { id: "vehicle", title: "Cars", match: ["vehicle"] },
+  { id: "map", title: "Buildings / maps", match: ["map"] },
+  { id: "audio", title: "Sound packs", match: ["audio"] },
+  { id: "els", title: "ELS", match: ["els"] },
+  { id: "other", title: "Other", match: [] },
+];
+
 const TYPE_SECTIONS = [
   { id: "lspdfr", title: "LSPDFR", hint: "Rage Plugin Hook and LSPD First Response. Keep this enabled.", match: ["lspdfr", "rage"] },
   { id: "script", title: "Scripts / ASI", hint: "Root scripts such as DirectStorageFix. Not GTA Online.", match: ["script"] },
@@ -173,24 +185,22 @@ function folderHint(mod) {
   return [...hits].slice(0, 3).join(" · ");
 }
 
+function typeLabel(mod) {
+  const section = TYPE_SECTIONS.find((row) => row.id === primaryKind(mod));
+  return section ? section.title : "Other";
+}
+
 function renderModCard(mod) {
-  const when = new Date(mod.installedAt).toLocaleString();
-  const group = primaryKind(mod);
-  const extra = labelsFor(mod).filter((label) => {
-    if (label === KIND_LABELS[group]) return false;
-    if (group === "lspdfr" && label === "Sound packs") return false;
-    return true;
-  });
   const folder = folderHint(mod);
   const lamp = mod.lamp === "ok" ? "ok" : "bad";
   const lampLabel = mod.lampLabel || (lamp === "ok" ? "Working" : "Not working");
+  const meta = [lampLabel, folder].filter(Boolean).join(" · ");
   return `
     <article class="mod ${mod.enabled ? "" : "disabled"}" data-id="${escapeHtml(mod.id)}">
       <i class="lamp ${lamp}" title="${escapeHtml(mod.lampDetail || lampLabel)}"></i>
-      <div>
+      <div class="mod-main">
         <h3>${escapeHtml(displayName(mod))}</h3>
-        <p><span class="mod-state">${escapeHtml(lampLabel)}</span> · ${mod.fileCount} files${folder ? ` · ${escapeHtml(folder)}` : ""} · ${when}</p>
-        ${kindBadges(extra)}
+        <p>${escapeHtml(meta)}</p>
       </div>
       <div class="mod-actions">
         <button class="ghost" data-act="toggle" type="button">${mod.enabled ? "Disable" : "Enable"}</button>
@@ -202,26 +212,27 @@ function renderModCard(mod) {
 
 function renderMods(mods) {
   ui.modCount.textContent = String(mods.length);
+  if (!mods.length) {
+    ui.mods.innerHTML = `<p class="empty">Nothing installed yet.</p>`;
+    return;
+  }
   const groups = new Map(TYPE_SECTIONS.map((section) => [section.id, []]));
   for (const mod of mods) {
     const key = primaryKind(mod);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(mod);
   }
-
+  const byName = (a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" });
   ui.mods.innerHTML = TYPE_SECTIONS.map((section) => {
-    const items = groups.get(section.id) || [];
-    if (!items.length && section.id === "other") return "";
+    const items = (groups.get(section.id) || []).sort(byName);
+    if (!items.length) return "";
     return `
-      <section class="mod-type${items.length ? "" : " is-empty"}" data-type="${section.id}">
+      <section class="mod-type" data-type="${section.id}">
         <header class="mod-type-head">
-          <div>
-            <h3>${escapeHtml(section.title)}</h3>
-            <p>${escapeHtml(section.hint)}</p>
-          </div>
+          <h3>${escapeHtml(section.title)}</h3>
           <span class="count">${items.length}</span>
         </header>
-        ${items.length ? `<div class="mod-type-list">${items.map(renderModCard).join("")}</div>` : ""}
+        <div class="mod-type-list">${items.map(renderModCard).join("")}</div>
       </section>
     `;
   }).join("");
@@ -309,6 +320,30 @@ function formatWhen(iso) {
   return date.toLocaleString([], { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" });
 }
 
+function keybindBlock(info) {
+  const data = info || {};
+  const binds = data.binds || [];
+  if (!binds.length) {
+    return `<p class="muted">${escapeHtml(data.note || "No keybinds were found in this mod’s configs or notes.")}</p>`;
+  }
+  const rows = binds
+    .map(
+      (bind) => `
+      <li class="keybind-row">
+        <kbd>${escapeHtml(bind.keys)}</kbd>
+        <div>
+          <strong>${escapeHtml(bind.action)}</strong>
+          ${bind.detail ? `<small>${escapeHtml(bind.detail)}</small>` : ""}
+        </div>
+      </li>`
+    )
+    .join("");
+  return `
+    <p class="muted">${escapeHtml(data.note || "")}</p>
+    <ul class="keybind-list">${rows}</ul>
+  `;
+}
+
 function renderActiveProfile(summary) {
   if (!ui.profileName) return;
   if (!summary || !summary.profile) {
@@ -337,6 +372,17 @@ function userError(error) {
   const raw = error && error.message ? String(error.message) : String(error || "Something went wrong.");
   if (/What happened|INSTALLATION FAILED|PROFILE INCOMPLETE|CONFIG CHANGED OUTSIDE/i.test(raw)) return raw;
   return `What happened\n${raw}\n\nWhy it matters\nThe last action did not finish.\n\nWhat you can do\nTry again, or use Recovery / Restore Known-Good Setup.`;
+}
+
+function showModsPanel(which) {
+  const smartOn = which === "smart";
+  const folder = $("mods-panel-folder");
+  const smart = $("mods-panel-smart");
+  if (folder) folder.classList.toggle("hidden", smartOn);
+  if (smart) smart.classList.toggle("hidden", !smartOn);
+  document.querySelectorAll(".mods-switch [data-mods-panel]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.modsPanel === which);
+  });
 }
 
 function showPage(page) {
@@ -560,6 +606,28 @@ async function refresh() {
   renderState(await window.tactix.state());
 }
 
+async function refreshScreen() {
+  if (busy) return;
+  showOverlay(`
+    <p class="eyebrow">REFRESH</p>
+    <h2>Updating the manager</h2>
+    <p>Reloading folders, mods, profiles, and status. The game is not closed.</p>
+  `);
+  try {
+    busy = true;
+    await refresh();
+    await refreshSmart();
+    await refreshDashboard();
+    addLog({ level: "ok", message: "Manager refreshed." });
+  } catch (error) {
+    addLog({ level: "error", message: userError(error) });
+  } finally {
+    busy = false;
+    if (state) renderState(state);
+    hideOverlay();
+  }
+}
+
 function setupForm(seed = {}) {
   const official = seed.officialPath || seed.path || state?.config.officialPath || "";
   const sandboxPath = seed.sandboxPath || seed.suggestedSandbox || state?.config.sandboxPath || "";
@@ -753,33 +821,19 @@ function compatibilityLabel(status) {
 }
 
 function renderSmartCard(mod) {
-  const when = new Date(mod.installedAt).toLocaleString();
-  const conf = Math.round((mod.confidence || 0) * 100);
-  const skipped = (mod.skipped || []).length;
-  const files = (mod.files || []).length;
   const compat = compatibilityLabel(mod.compatibilityStatus || mod.compatibility);
-  const requiredTotal = Number(mod.requiredTotal) || 0;
-  const requiredSatisfied = Number(mod.requiredSatisfied) || 0;
-  const deps = requiredTotal ? `${requiredSatisfied}/${requiredTotal} required` : "No required deps recorded";
   const health = modHealthById.get(mod.id);
   const status = health ? health.status : mod.enabled === false ? "DISABLED" : (mod.cardHealth || "UNKNOWN").toUpperCase();
   const reasons = (health && health.reasons) || [];
-  const crash = health && health.crash;
-  const profiles = (health && health.profiles) || [];
-  const history = (mod.historyLabels || []).slice(-3).join(" · ");
   const lamp = status === "BROKEN" ? "bad" : status === "WARNING" || status === "UNKNOWN" ? "warn" : status === "DISABLED" ? "grey" : "ok";
   const statusLabel = status === "DISABLED" ? "Disabled" : status;
+  const meta = [mod.type || "Mod", statusLabel, compat !== "Unknown" ? compat : "", reasons[0]].filter(Boolean).join(" · ");
   return `
     <article class="mod ${mod.enabled ? "" : "disabled"}" data-smart-id="${escapeHtml(mod.id)}">
       <i class="lamp ${lamp}"></i>
-      <div>
+      <div class="mod-main">
         <h3>${escapeHtml(mod.name)}</h3>
-        <p>${escapeHtml(mod.type || "Mod")} · ${escapeHtml(mod.version || "UNKNOWN")} · ${files} files${skipped ? ` · ${skipped} skipped` : ""} · ${when}</p>
-        <p class="muted">${escapeHtml(statusLabel)}${reasons[0] ? ` — ${escapeHtml(reasons[0])}` : ""} · Compatibility: ${escapeHtml(compat)} · ${escapeHtml(deps)}</p>
-        ${reasons.slice(1, 3).map((row) => `<p class="muted">• ${escapeHtml(row)}</p>`).join("")}
-        ${crash && crash.total ? `<p class="muted">Sessions: ${crash.clean} clean · ${crash.failed} failed${crash.level !== "NONE" ? ` · Crash correlation: ${crash.level}` : ""}</p>` : ""}
-        ${profiles.length ? `<p class="muted">Used in: ${escapeHtml(profiles.join(", "))}</p>` : ""}
-        ${history ? `<p class="muted">${escapeHtml(history)}</p>` : ""}
+        <p>${escapeHtml(meta)}</p>
       </div>
       <div class="mod-actions">
         <button data-sact="details" type="button">Details</button>
@@ -811,13 +865,59 @@ function visibleSmartMods() {
   });
 }
 
+function primarySmartKind(mod) {
+  const hay = [
+    mod.type,
+    mod.category,
+    mod.canonicalModId,
+    ...((mod.files || []).map((file) => file.destination || file)),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .replace(/\\/g, "/");
+  if (hay.includes("plugins/lspdfr") || hay.includes("lspdfr_plugin")) return "lspdfr";
+  if (hay.includes("rage_plugin") || hay.includes("ragepluginhook") || hay.includes("rage plugin")) return "rage";
+  if (hay.includes("dependency") || /ragenativeui|lemonui|ifruit|damagetracker/.test(hay)) return "dependency";
+  if (/\.asi\b/.test(hay) || hay.includes("/scripts/") || hay.includes("asi") || hay.includes("script")) return "script";
+  if (hay.includes("vehicle") || hay.includes("dlcpack") || /\.yft|\.ytd/.test(hay)) return "vehicle";
+  if (hay.includes("map") || hay.includes("ymap")) return "map";
+  if (hay.includes("audio") || hay.includes("awc")) return "audio";
+  if (hay.includes("els")) return "els";
+  for (const section of SMART_SECTIONS) {
+    if (section.id === "other") continue;
+    if (section.match.some((token) => hay.includes(token))) return section.id;
+  }
+  return "other";
+}
+
 function renderSmartMods() {
   if (!ui.smartMods) return;
   const rows = visibleSmartMods();
   if (ui.smartCount) ui.smartCount.textContent = String(smartMods.length);
-  ui.smartMods.innerHTML = rows.length
-    ? rows.map(renderSmartCard).join("")
-    : `<p class="empty">${smartMods.length ? "No mods match that search." : "No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin."}</p>`;
+  if (!rows.length) {
+    ui.smartMods.innerHTML = `<p class="empty">${smartMods.length ? "No mods match that search." : "No Smart Install mods yet. Tick Preview first, then drop a plugin."}</p>`;
+    return;
+  }
+  const groups = new Map(SMART_SECTIONS.map((section) => [section.id, []]));
+  for (const mod of rows) {
+    const key = primarySmartKind(mod);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(mod);
+  }
+  const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+  ui.smartMods.innerHTML = SMART_SECTIONS.map((section) => {
+    const items = (groups.get(section.id) || []).sort(byName);
+    if (!items.length) return "";
+    return `
+      <section class="mod-type" data-type="${section.id}">
+        <header class="mod-type-head">
+          <h3>${escapeHtml(section.title)}</h3>
+          <span class="count">${items.length}</span>
+        </header>
+        <div class="mod-type-list">${items.map(renderSmartCard).join("")}</div>
+      </section>
+    `;
+  }).join("");
 }
 
 async function refreshSmart() {
@@ -898,6 +998,54 @@ function recommendationCopy(status) {
     default:
       return { cls: "warn", title: "INSTALL WITH WARNING", button: "Install Anyway" };
   }
+}
+
+function offerForDep(preview, dep) {
+  return ((preview && preview.downloadOffers) || []).find(
+    (offer) => offer.id === dep.modId || String(offer.name).toLowerCase() === String(dep.name || "").toLowerCase()
+  );
+}
+
+function depActionButtons(offer, dep) {
+  if (!offer) return "";
+  if (dep && (dep.state === "INSTALLED" || dep.state === "BUNDLED")) return "";
+  if (dep && dep.state === "DISABLED") {
+    return `<small>Parked in Duty. Enable it from Smart Install if this plugin should use it.</small>`;
+  }
+  const bits = [];
+  if (offer.note) bits.push(`<small>${escapeHtml(offer.note)}</small>`);
+  if (offer.sourceLabel) bits.push(`<small>${escapeHtml(offer.sourceLabel)}</small>`);
+  const actions = [];
+  if (offer.canDownload) {
+    actions.push(
+      `<button type="button" class="primary" data-dep-download="${escapeHtml(offer.id)}">Download &amp; install</button>`
+    );
+  }
+  if (offer.pageUrl) {
+    actions.push(
+      `<button type="button" class="ghost" data-dep-page="${escapeHtml(offer.pageUrl)}">Open download page</button>`
+    );
+  }
+  return `${bits.join("")}${actions.length ? `<div class="dep-actions">${actions.join("")}</div>` : ""}`;
+}
+
+function installGuideBlock(guide) {
+  if (!guide || !(guide.steps || []).length) {
+    return `<h3>How to install for LSPDFR</h3><p class="muted">No install notes yet. Tick Preview first so the app can read the pack’s README and any known public notes.</p>`;
+  }
+  const source = (guide.sources || []).length
+    ? `<p class="fineprint">${guide.usedAi ? "AI summary from " : "From "}${escapeHtml(guide.sources.join(" · "))}</p>`
+    : "";
+  const extra = [];
+  if ((guide.needs || []).length) extra.push(`Needs: ${guide.needs.join(", ")}`);
+  if ((guide.conflicts || []).length) extra.push(`Often conflicts with: ${guide.conflicts.join(", ")}`);
+  return `
+    <h3>How to install for LSPDFR</h3>
+    ${guide.title ? `<p><strong>${escapeHtml(guide.title)}</strong></p>` : ""}
+    <ol class="guide-steps">${guide.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>
+    ${extra.length ? `<p class="muted">${escapeHtml(extra.join(" · "))}</p>` : ""}
+    ${source}
+  `;
 }
 
 function vehiclePreviewBlock(preview) {
@@ -1030,6 +1178,7 @@ function confirmSmartPreview(preview) {
       `
       <h2>Smart Install — ${escapeHtml(preview.name)}</h2>
       ${identityBlock(preview)}
+      ${installGuideBlock(preview.installGuide)}
       ${vehiclePreviewBlock(preview)}
       ${relationBlock(preview)}
       <div class="rec-banner">
@@ -1066,7 +1215,10 @@ function confirmSmartPreview(preview) {
                       : "";
                 return `<li><i class="lamp ${lamp}"></i><div><strong>${escapeHtml(d.name)}${escapeHtml(
                   ver
-                )}</strong><small>${escapeHtml(d.kind)} · ${escapeHtml(d.state)}</small></div></li>`;
+                )}</strong><small>${escapeHtml(d.kind)} · ${escapeHtml(d.state)}</small>${depActionButtons(
+                  offerForDep(preview, d),
+                  d
+                )}</div></li>`;
               })
               .join("")}</ul>`
           : "<h3>Dependencies</h3><p class=\"muted\">None recorded.</p>"
@@ -1132,7 +1284,7 @@ function confirmSmartPreview(preview) {
       true
     );
 
-    $("smart-cancel").onclick = () => resolve(false);
+    $("smart-cancel").onclick = () => resolve({ action: "cancel" });
     const install = $("smart-install");
     if (install && !installDisabled) {
       install.onclick = () => {
@@ -1144,9 +1296,40 @@ function confirmSmartPreview(preview) {
           );
           if (!ok) return;
         }
-        resolve(true);
+        resolve({ action: "install" });
       };
     }
+    ui.dialog.querySelectorAll("[data-dep-page]").forEach((button) => {
+      button.onclick = () => {
+        window.tactix.depOpenPage(button.dataset.depPage).catch((error) => {
+          addLog({ level: "error", message: userError(error) });
+        });
+      };
+    });
+    ui.dialog.querySelectorAll("[data-dep-download]").forEach((button) => {
+      button.onclick = async () => {
+        const offer = (preview.downloadOffers || []).find((row) => row.id === button.dataset.depDownload);
+        if (!offer) return;
+        const ok = window.confirm(
+          `Download ${offer.name} from ${offer.sourceLabel || "its official source"} and install it into the Duty LSPDFR folder only?\n\nNothing is written to the official Steam / Online folder.`
+        );
+        if (!ok) return;
+        button.disabled = true;
+        showProgress("Downloading", offer.name);
+        try {
+          const result = await window.tactix.depDownloadInstall({ modId: offer.id });
+          if (!result || !result.ok) throw new Error((result && result.message) || `Could not install ${offer.name}.`);
+          addLog({ level: "ok", message: `Installed ${result.name} into Duty.` });
+          await window.tactix.smartCancel(preview.id).catch(() => {});
+          const next = await window.tactix.smartAnalyze(preview.source);
+          resolve({ action: "refresh", preview: next });
+        } catch (error) {
+          addLog({ level: "error", message: userError(error) });
+          window.alert(userError(error));
+          resolve({ action: "refresh", preview });
+        }
+      };
+    });
   });
 }
 
@@ -1163,8 +1346,12 @@ async function smartIngest(sources) {
       continue;
     }
 
-    const go = await confirmSmartPreview(preview);
-    if (!go) {
+    let decision = await confirmSmartPreview(preview);
+    while (decision && decision.action === "refresh") {
+      preview = decision.preview || preview;
+      decision = await confirmSmartPreview(preview);
+    }
+    if (!decision || decision.action === "cancel") {
       await window.tactix.smartCancel(preview.id).catch(() => {});
       hideOverlay();
       addLog({ level: "info", message: `Cancelled ${preview.name}.` });
@@ -1184,8 +1371,12 @@ async function smartIngest(sources) {
         hideOverlay();
         try {
           preview = await window.tactix.smartAnalyze(source);
-          const again = await confirmSmartPreview(preview);
-          if (!again) {
+          let again = await confirmSmartPreview(preview);
+          while (again && again.action === "refresh") {
+            preview = again.preview || preview;
+            again = await confirmSmartPreview(preview);
+          }
+          if (!again || again.action === "cancel") {
             await window.tactix.smartCancel(preview.id).catch(() => {});
             hideOverlay();
             continue;
@@ -1667,6 +1858,61 @@ function bindCrashActionButtons(session) {
   });
 }
 
+async function showDependencyDetails(session, name) {
+  let offer = null;
+  try {
+    const offers = await window.tactix.depOffers({ names: [name] });
+    offer = (offers && offers[0]) || null;
+  } catch {
+    offer = null;
+  }
+  const actions = [];
+  if (offer && offer.canDownload) {
+    actions.push(`<button id="dep-download" class="primary" type="button">Download &amp; install</button>`);
+  }
+  if (offer && offer.pageUrl) {
+    actions.push(`<button id="dep-page" class="ghost" type="button">Open download page</button>`);
+  }
+  const note = offer
+    ? offer.note || offer.sourceLabel
+    : "If you already have the pack, drop it on Smart Install. Curated official zips can also be downloaded from a Smart Install preview.";
+  showOverlay(
+    `<h2>Dependency details</h2><p><strong>${escapeHtml(name)}</strong> is not installed in Duty.</p><p>${escapeHtml(
+      note
+    )}</p><p class="muted">Downloads go into the Duty LSPDFR folder only — never the official Steam / Online folder.</p><div class="dialog-actions">${actions.join(
+      ""
+    )}<button id="dep-close" class="ghost" type="button">Close</button></div>`,
+    true
+  );
+  $("dep-close").onclick = () => showSessionDetail(session);
+  const page = $("dep-page");
+  if (page && offer) {
+    page.onclick = () => window.tactix.depOpenPage(offer.pageUrl).catch((error) => addLog({ level: "error", message: userError(error) }));
+  }
+  const download = $("dep-download");
+  if (download && offer) {
+    download.onclick = async () => {
+      const ok = window.confirm(
+        `Download ${offer.name} from ${offer.sourceLabel || "its official source"} and install it into the Duty LSPDFR folder only?`
+      );
+      if (!ok) return;
+      download.disabled = true;
+      showProgress("Downloading", offer.name);
+      try {
+        const result = await window.tactix.depDownloadInstall({ modId: offer.id });
+        addLog({ level: "ok", message: `Installed ${result.name} into Duty.` });
+        hideOverlay();
+        await refresh();
+        showSessionDetail(session);
+      } catch (error) {
+        addLog({ level: "error", message: userError(error) });
+        window.alert(userError(error));
+        showDependencyDetails(session, name);
+      }
+    };
+  }
+}
+
 function confirmCrashAction(session, action) {
   const name = action.targetName || "this component";
   let title = "Test this theory?";
@@ -1693,8 +1939,7 @@ function confirmCrashAction(session, action) {
     body = action.warning;
   }
   if (action.type === "OPEN_DEPENDENCY_DETAILS") {
-    showOverlay(`<h2>Dependency details</h2><p>${escapeHtml(name)} is not installed. V4C will not download it. Install it yourself through Smart Install if you have the pack.</p><div class="dialog-actions"><button id="dep-close" class="ghost" type="button">Close</button></div>`, true);
-    $("dep-close").onclick = () => showSessionDetail(session);
+    showDependencyDetails(session, name);
     return;
   }
   showOverlay(`
@@ -2168,6 +2413,11 @@ async function showModDetails(installId) {
     <p class="eyebrow">MOD DETAILS</p>
     <h2>${escapeHtml(knowledge.displayName || (details.mod && details.mod.name) || installId)}</h2>
     <p>${escapeHtml(health.status)}</p>
+    ${
+      health.runtime
+        ? `<p>Local Duty check: ${escapeHtml(health.runtime.status)}${health.runtime.evidence ? ` — ${escapeHtml(health.runtime.evidence)}` : ""}</p>`
+        : ""
+    }
     <ul>${(health.reasons || []).map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul>
     <p>Installed: ${escapeHtml((details.mod && details.mod.version) || "UNKNOWN")}<br />Known-good: ${escapeHtml(knowledge.knownGoodVersion || "none")}${knowledge.hasUserOverride ? "<br /><em>Some fields are your local notes, not verified global truth.</em>" : ""}</p>
     <h3>Version history</h3>
@@ -2175,6 +2425,8 @@ async function showModDetails(installId) {
     <h3>Dependencies</h3>
     <p>${tree || "None recorded."}</p>
     ${dependents.length ? `<p>${escapeHtml((details.mod && details.mod.name) || "This mod")} is required by:<br />${dependents.map((row) => `• ${escapeHtml(row.name)}`).join("<br />")}</p>` : ""}
+    <h3>Keybinds</h3>
+    ${keybindBlock(details.keybinds)}
     <h3>Managed configs</h3>
     <ul>${configs.map((row) => `<li><code>${escapeHtml(row.destination)}</code> ${row.modifiedFromDefault ? "modified from default" : "matches default"} · last changed ${escapeHtml(formatWhen(row.lastChanged))}<br />
       <button data-cdiff="${escapeHtml(row.destination)}" class="ghost" type="button">View differences</button>
@@ -2394,6 +2646,17 @@ async function showPrefs() {
     <p><label><input id="set-snap-update" type="checkbox" ${cfg.snapshotBeforeUpdate ? "checked" : ""} /> Create snapshot before update</label></p>
     <p><label><input id="set-snap-risk" type="checkbox" ${cfg.snapshotBeforeRiskyInstall !== false ? "checked" : ""} /> Create snapshot before risky install</label></p>
     <p><label><input id="set-preview" type="checkbox" ${cfg.smartPreviewDefault ? "checked" : ""} /> Smart Install preview default</label></p>
+    <p class="muted">If a pack needs RageNativeUI or another curated dependency, Smart Install offers Download &amp; install from the official GitHub release. LCPDFR.com files (like Damage Tracker Framework) still need you to download the zip, then drop it here.</p>
+    <p><label><input id="set-guides" type="checkbox" ${cfg.lookupInstallGuides !== false ? "checked" : ""} /> Look up public install notes during preview</label></p>
+    <p><label><input id="set-ai" type="checkbox" ${cfg.aiGuideEnabled ? "checked" : ""} /> Use AI to summarize install notes (optional)</label></p>
+    <div class="field">
+      <label>AI API key (kept on this PC)</label>
+      <input id="set-ai-key" type="password" autocomplete="off" placeholder="${cfg.aiApiKey ? "Saved — leave blank to keep" : "Optional"}" />
+    </div>
+    <div class="field">
+      <label>AI endpoint</label>
+      <input id="set-ai-url" value="${escapeHtml(cfg.aiApiUrl || "")}" placeholder="https://api.openai.com/v1/chat/completions" />
+    </div>
     <p><label>Session retention <input id="set-sess" type="number" min="5" max="200" value="${Number(cfg.sessionRetention) || 40}" /></label></p>
     <p><label>Automatic snapshot retention <input id="set-auto" type="number" min="5" max="40" value="${Number(cfg.autoSnapshotRetention) || 15}" /></label></p>
     <p><label><input id="set-last" type="checkbox" ${cfg.openLastPage ? "checked" : ""} /> Open last active page</label></p>
@@ -2426,17 +2689,23 @@ async function showPrefs() {
     markPrefTheme();
   };
   $("set-save").onclick = async () => {
-    await window.tactix.settingsSave({
+    const patch = {
       defaultProfileId: $("set-profile").value,
       snapshotBeforeUpdate: $("set-snap-update").checked,
       snapshotBeforeRiskyInstall: $("set-snap-risk").checked,
       smartPreviewDefault: $("set-preview").checked,
+      lookupInstallGuides: $("set-guides").checked,
+      aiGuideEnabled: $("set-ai").checked,
+      aiApiUrl: $("set-ai-url").value.trim(),
       sessionRetention: Number($("set-sess").value),
       autoSnapshotRetention: Number($("set-auto").value),
       openLastPage: $("set-last").checked,
       developerMode: $("set-dev").checked,
       theme: prefTheme,
-    });
+    };
+    const key = $("set-ai-key").value.trim();
+    if (key) patch.aiApiKey = key;
+    await window.tactix.settingsSave(patch);
     hideOverlay();
   };
 }
@@ -2453,6 +2722,16 @@ document.querySelectorAll(".nav-btn").forEach((button) => {
   };
 });
 
+document.querySelectorAll(".mods-switch [data-mods-panel]").forEach((button) => {
+  button.onclick = () => showModsPanel(button.dataset.modsPanel);
+});
+if ($("btn-refresh")) $("btn-refresh").onclick = () => refreshScreen();
+document.addEventListener("keydown", (event) => {
+  if (event.key === "F5") {
+    event.preventDefault();
+    refreshScreen();
+  }
+});
 if ($("theme-dark")) $("theme-dark").onclick = () => applyTheme("dark", true);
 if ($("theme-bright")) $("theme-bright").onclick = () => applyTheme("bright", true);
 if ($("btn-troubleshoot")) $("btn-troubleshoot").onclick = () => showTroubleshoot().catch((error) => addLog({ level: "error", message: userError(error) }));

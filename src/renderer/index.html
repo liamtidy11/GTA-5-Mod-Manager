@@ -25,6 +25,7 @@
             <button id="theme-dark" type="button">Dark</button>
             <button id="theme-bright" type="button">Bright</button>
           </div>
+          <button id="btn-refresh" class="ghost" type="button" title="Reload folders, mods, and status">Refresh</button>
           <button id="btn-settings" class="ghost" type="button" title="Folders and first-time setup">Setup</button>
         </div>
       </header>
@@ -179,67 +180,59 @@
             </section>
 
             <div id="page-mods" class="hidden">
-              <div
-                id="dropzone"
-                class="dropzone"
-                tabindex="0"
-              >
-                <div>
-                  <p class="drop-kicker">Hands-off install</p>
-                  <h2>Drop LSPDFR here</h2>
-                  <p>The app unpacks it, installs it, turns BattlEye off, and runs a function test.</p>
-                  <div class="row-actions" style="justify-content: center">
+              <section class="card mods-page">
+                <div id="dropzone" class="dropzone" tabindex="0">
+                  <div class="dropzone-copy">
+                    <strong>Install</strong>
+                    <span>Drop a pack or plugin here. LSPDFR, cars, and plugins stay in the Duty folder.</span>
+                  </div>
+                  <div class="drop-actions">
                     <button id="btn-browse" class="ghost" type="button">Browse files</button>
                     <button id="btn-browse-folder" class="ghost" type="button">Browse folder</button>
+                    <label class="smart-toggle" title="Show a preview of exactly what will be installed, with protected-file and conflict checks, before anything is copied.">
+                      <input type="checkbox" id="smart-toggle" />
+                      Preview first
+                    </label>
                   </div>
-                  <label class="smart-toggle" title="Show a preview of exactly what will be installed, with protected-file and conflict checks, before anything is copied.">
-                    <input type="checkbox" id="smart-toggle" />
-                    Preview before installing (Smart Install)
-                  </label>
                 </div>
-              </div>
 
-              <section class="card mods-card">
-                <div class="mods-head">
-                  <div>
-                    <p class="section-label">Installed in LSPDFR folder</p>
-                    <p class="mods-sub">Grouped by pack type. Cars, maps, and sounds stay in this folder only.</p>
+                <div class="mods-switch" role="tablist" aria-label="Installed mods">
+                  <button id="mods-tab-folder" class="is-active" type="button" data-mods-panel="folder">
+                    Folder packs <span id="mod-count" class="count">0</span>
+                  </button>
+                  <button id="mods-tab-smart" type="button" data-mods-panel="smart">
+                    Smart Install <span id="smart-count" class="count">0</span>
+                  </button>
+                </div>
+
+                <div id="mods-panel-folder" class="mods-panel">
+                  <div id="mod-list" class="mod-list">
+                    <p class="empty">Nothing installed yet.</p>
                   </div>
-                  <span id="mod-count" class="count">0</span>
                 </div>
-                <div id="mod-list" class="mod-list">
-                  <p class="empty">Nothing installed yet. Drop an archive to start.</p>
-                </div>
-              </section>
 
-              <section class="card mods-card smart-card">
-                <div class="mods-head">
-                  <div>
-                    <p class="section-label">Smart Install</p>
-                    <p class="mods-sub">Individual plugins and scripts installed with a preview, automatic backups, and safe one-click removal.</p>
+                <div id="mods-panel-smart" class="mods-panel hidden">
+                  <div class="mods-toolbar">
+                    <label class="sr-only" for="mod-search">Search mods</label>
+                    <input id="mod-search" type="search" placeholder="Search…" autocomplete="off" />
+                    <select id="mod-filter" aria-label="Filter mods">
+                      <option value="">All</option>
+                      <option value="ENABLED">Enabled</option>
+                      <option value="DISABLED">Disabled</option>
+                      <option value="WARNING">Warning</option>
+                      <option value="BROKEN">Broken</option>
+                      <option value="UNKNOWN">Unknown</option>
+                    </select>
                   </div>
-                  <span id="smart-count" class="count">0</span>
+                  <div id="smart-mod-list" class="mod-list">
+                    <p class="empty">No Smart Install mods yet. Tick Preview first, then drop a plugin.</p>
+                  </div>
                 </div>
-                <div class="mods-toolbar">
-                  <label class="sr-only" for="mod-search">Search mods</label>
-                  <input id="mod-search" type="search" placeholder="Search name, DLL, alias…" autocomplete="off" />
-                  <select id="mod-filter" aria-label="Filter mods">
-                    <option value="">All</option>
-                    <option value="ENABLED">Enabled</option>
-                    <option value="DISABLED">Disabled</option>
-                    <option value="WARNING">Warning</option>
-                    <option value="BROKEN">Broken</option>
-                    <option value="UNKNOWN">Unknown</option>
-                  </select>
-                </div>
-                <div id="smart-mod-list" class="mod-list">
-                  <p class="empty">No Smart Install mods yet. Tick “Preview before installing”, then drop a plugin.</p>
-                </div>
-              </section>
 
-              <section class="card log-card">
-                <p class="section-label">Activity</p>
-                <ol id="log" class="log"></ol>
+                <div class="mods-log">
+                  <p class="section-label">Activity</p>
+                  <ol id="log" class="log"></ol>
+                </div>
               </section>
             </div>
           </section>

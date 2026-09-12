@@ -6,7 +6,7 @@
       "file": "RAGENativeUI.dll",
       "name": "RAGENativeUI",
       "level": "required",
-      "url": "https://www.lcpdfr.com/downloads/gta5mods/scripts/22447-ragenativeui/",
+      "url": "https://github.com/alexguirre/RAGENativeUI/releases/latest",
       "note": "Menu framework used by many callouts and plugins."
     },
     {
@@ -14,7 +14,7 @@
       "file": "LemonUI.dll",
       "name": "LemonUI",
       "level": "required",
-      "url": "https://www.gta5-mods.com/tools/lemonui",
+      "url": "https://github.com/LemonUIbyLemon/LemonUI/releases/latest",
       "note": "UI framework used by newer plugins."
     },
     {
@@ -22,7 +22,7 @@
       "file": "iFruitAddon2.dll",
       "name": "iFruitAddon2",
       "level": "required",
-      "url": "https://www.gta5-mods.com/tools/ifruitaddon2-net-framework",
+      "url": "https://github.com/Bob74/iFruitAddon2/releases/latest",
       "note": "In-game phone contact framework."
     }
   ],

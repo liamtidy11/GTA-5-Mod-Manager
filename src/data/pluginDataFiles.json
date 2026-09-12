@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "note": "Files a plugin must have on disk after install. Used only to restore from the manager’s stored pack — never from the internet.",
+  "plugins": [
+    {
+      "id": "policing-redefined",
+      "dll": "plugins/LSPDFR/PolicingRedefined.dll",
+      "required": ["plugins/LSPDFR/PolicingRedefined/Backup/DefaultRegions.xml"]
+    }
+  ]
+}

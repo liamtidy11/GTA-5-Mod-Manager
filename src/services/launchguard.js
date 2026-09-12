@@ -18,6 +18,16 @@ const PLUGIN_ROOT_OK = new Set([
   "lspd first response.pdb",
 ]);
 
+// RPH loads these from Plugins\ on purpose (Policing Redefined needs DTF).
+const KNOWN_RPH_DEP_PLUGIN = /^damagetrack(?:er|ing)framework(?:\.dll(?:\.config)?|\.pdb)?$/i;
+
+function isAllowedPluginRootName(name) {
+  const lower = String(name || "").toLowerCase();
+  if (!lower || lower === "lspdfr") return true;
+  if (PLUGIN_ROOT_OK.has(lower)) return true;
+  return KNOWN_RPH_DEP_PLUGIN.test(lower);
+}
+
 const OFFICIAL_FORBIDDEN = [
   "RagePluginHook.exe",
   "RAGEPluginHook.exe",
@@ -55,11 +65,7 @@ function item(id, ok, level, title, detail) {
 }
 
 function pluginRootJunk(sandboxPath) {
-  return listNames(fileIn(sandboxPath, "plugins")).filter((name) => {
-    const lower = name.toLowerCase();
-    if (lower === "lspdfr") return false;
-    return !PLUGIN_ROOT_OK.has(lower);
-  });
+  return listNames(fileIn(sandboxPath, "plugins")).filter((name) => !isAllowedPluginRootName(name));
 }
 
 function findNewtonsoft(sandboxPath) {
@@ -176,7 +182,7 @@ function verifyLaunchIntegrity(sandboxPath, officialPath) {
       "Plugins folder",
       junk.length
         ? `Extra files in Plugins\\ will be treated as plugins: ${junk.join(", ")}.`
-        : "Plugins\\ only has LSPD First Response and the LSPDFR subfolder."
+        : "Plugins\\ only has LSPD First Response, known RPH dependency plugins, and the LSPDFR subfolder."
     )
   );
 
@@ -362,6 +368,7 @@ function verifyLaunchIntegrity(sandboxPath, officialPath) {
 module.exports = {
   REQUIRED_ROOT_DLLS,
   PLUGIN_ROOT_OK,
+  isAllowedPluginRootName,
   verifyLaunchIntegrity,
   verifyMapping,
 };

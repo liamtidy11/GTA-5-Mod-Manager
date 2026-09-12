@@ -30,6 +30,10 @@ const { analyzeVehiclePackage, applyArchiveRequiredGuard } = require("./vehicle/
 const gtaArchiveService = require("./archive/gtaArchiveService");
 const { isVehicleArchiveAsset } = require("./vehicle/vehicleAssetGrouper");
 const { listDutyCandidateArchives } = require("./archive/archiveIndex");
+const installAdvisor = require("./knowledge/installAdvisor");
+const dependencyDownload = require("./knowledge/dependencyDownload");
+const { normalizeDutyDest } = require("./knowledge/gameTreeNormalize");
+const dutyLayoutFix = require("./knowledge/dutyLayoutFix");
 
 // Smart Install V2 orchestrator. Analysis is read-only on Duty.
 // Pipeline:
@@ -92,6 +96,9 @@ async function analyze({
   vehiclePathMap = null,
   mockArchivePath = "",
   discoverOptions: discoverOptionsOverride = null,
+  lookupGuides = false,
+  aiApiKey = "",
+  aiApiUrl = "",
 }) {
   if (!exists(source)) {
     throw new SmartInstallError("PACKAGE_ERROR", "That file or folder no longer exists.", {
@@ -347,6 +354,14 @@ async function analyze({
   });
   const canonicalModId = recognition.modId || null;
   appendAudit(dataDir, "ANALYZED", { installId: id, canonicalModId, analysisId: analysisKey });
+  const installGuide = await installAdvisor.advise({
+    scan,
+    recognition,
+    archiveName: baseName,
+    lookup: Boolean(lookupGuides),
+    apiKey: aiApiKey,
+    apiUrl: aiApiUrl,
+  });
 
   return {
     id,
@@ -399,6 +414,8 @@ async function analyze({
     vehicle,
     archiveRequired: Boolean(vehicle.archiveRequired),
     archivePlan: vehicle.plan || null,
+    installGuide,
+    downloadOffers: dependencyDownload.offersFor(resolved.dependencies),
   };
 }
 
@@ -484,20 +501,21 @@ async function commit({
         });
       }
       const op = ops[i];
-      const destAbs = safeJoin(dutyPath, op.destination.replace(/\//g, path.sep));
+      const destination = normalizeDutyDest(op.destination) || op.destination;
+      const destAbs = safeJoin(dutyPath, destination.replace(/\//g, path.sep));
       const sourceAbs = path.join(preview.payloadRoot, op.source.split("/").join(path.sep));
 
       let backupRel = null;
       if (op.action === "replace" && exists(destAbs)) {
         if (hooks && hooks.failBackup) {
-          throw new SmartInstallError("TRANSACTION_ERROR", "Backup creation failed.", { file: op.destination });
+          throw new SmartInstallError("TRANSACTION_ERROR", "Backup creation failed.", { file: destination });
         }
-        backupRel = backupManager.backupFile(dataDir, installId, op.destination, destAbs);
+        backupRel = backupManager.backupFile(dataDir, installId, destination, destAbs);
       }
 
       const hash = copyVerified(sourceAbs, destAbs);
-      saveInstalledFile(dataDir, installId, op.destination, destAbs);
-      journal.push({ destAbs, destination: op.destination, action: op.action, backupRel, hash });
+      saveInstalledFile(dataDir, installId, destination, destAbs);
+      journal.push({ destAbs, destination, action: op.action, backupRel, hash });
 
       if (onProgress && (i % 10 === 0 || i === ops.length - 1)) {
         onProgress({ done: i + 1, total: ops.length, file: op.destination, phase: "install" });
@@ -553,6 +571,11 @@ async function commit({
     manifestStore.write(dataDir, manifest);
 
     if (preview.stagingDir) await discardStaging(preview.stagingDir);
+    try {
+      dutyLayoutFix.healDutyLayout({ dutyPath, dataDir });
+    } catch {
+      /* layout heal must not fail a successful install */
+    }
     environmentInventory.invalidate({ dutyPath, dataDir });
     appendAudit(dataDir, "INSTALL_COMMITTED", { installId, canonicalModId, analysisId: preview.analysisId || "" });
     if (historyEvent === "UPDATED") appendAudit(dataDir, "UPDATED", { installId, canonicalModId, analysisId: preview.analysisId || "" });

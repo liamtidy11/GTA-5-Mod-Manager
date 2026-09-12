@@ -6,6 +6,7 @@ const { diagnoseManagedMod } = require("./orphanDetector");
 const { restoreStoredFile, hasStoredFile } = require("./payloadStore");
 const { isConfigFile } = require("./configPolicy");
 const { SmartInstallError } = require("./smartErrors");
+const { normalizeDutyDest } = require("./knowledge/gameTreeNormalize");
 
 function repairManagedMod({ manifest, dutyPath, dataDir }) {
   const checked = validateManifest(manifest);
@@ -18,7 +19,12 @@ function repairManagedMod({ manifest, dutyPath, dataDir }) {
   const restored = [];
   const skipped = [];
   for (const file of checked.manifest.files || []) {
-    const dest = file.destination;
+    const dest = normalizeDutyDest(file.destination) || file.destination;
+    const storeKey = hasStoredFile(dataDir, checked.manifest.id, dest)
+      ? dest
+      : hasStoredFile(dataDir, checked.manifest.id, file.destination)
+        ? file.destination
+        : dest;
     let destAbs;
     try {
       destAbs = safeJoin(dutyPath, dest.replace(/\//g, path.sep));
@@ -33,7 +39,7 @@ function repairManagedMod({ manifest, dutyPath, dataDir }) {
       }
       continue;
     }
-    if (hasStoredFile(dataDir, checked.manifest.id, dest) && restoreStoredFile(dataDir, checked.manifest.id, dest, destAbs)) {
+    if (hasStoredFile(dataDir, checked.manifest.id, storeKey) && restoreStoredFile(dataDir, checked.manifest.id, storeKey, destAbs)) {
       if (file.hash) {
         const got = hashFileSync(destAbs);
         if (got !== file.hash) {

@@ -50,6 +50,38 @@ test("an .asi at the root is classified as an ASI mod at root", () => {
   }
 });
 
+test("bang-prefixed game-root wrapper is stripped from destinations", () => {
+  const payload = tmpDir("payload-");
+  writeFile(payload, "! GTAV MAIN DIRECTORY/plugins/LSPDFR/PolicingRedefined/Backup/DefaultRegions.xml", "<regions />");
+  try {
+    const scan = modScanner.scan(payload);
+    const result = modClassifier.classify(scan);
+    const xml = result.perFile.find((f) => /defaultregions\.xml$/i.test(f.rel));
+    assert.equal(xml.destination, "plugins/LSPDFR/PolicingRedefined/Backup/DefaultRegions.xml");
+  } finally {
+    cleanup(payload);
+  }
+});
+
+test("RageNativeUI and DTF land in the Duty places plugins expect", () => {
+  const payload = tmpDir("payload-");
+  writeFile(payload, "RAGENativeUI.dll", "UI");
+  writeFile(payload, "DamageTrackerLib.dll", "LIB");
+  writeFile(payload, "DamageTrackerFramework.dll", "DTF");
+  try {
+    const scan = modScanner.scan(payload);
+    const result = modClassifier.classify(scan);
+    const rnui = result.perFile.find((f) => /ragenativeui\.dll$/i.test(f.rel));
+    const lib = result.perFile.find((f) => /damagetrackerlib\.dll$/i.test(f.rel));
+    const dtf = result.perFile.find((f) => /damagetrackerframework\.dll$/i.test(f.rel));
+    assert.equal(rnui.destination, "RAGENativeUI.dll");
+    assert.equal(lib.destination, "DamageTrackerLib.dll");
+    assert.equal(dtf.destination, "plugins/DamageTrackerFramework.dll");
+  } finally {
+    cleanup(payload);
+  }
+});
+
 test("a loose callout DLL is routed to plugins/LSPDFR by name", () => {
   const payload = tmpDir("payload-");
   writeFile(payload, "TrafficPolicer.dll", "PLUGIN");

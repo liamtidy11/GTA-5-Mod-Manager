@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "note": "Typical published defaults only. Your installed config always wins when a key is found there.",
+  "mods": {
+    "policing-redefined": {
+      "title": "Policing Redefined",
+      "source": "Published PR control notes",
+      "binds": [
+        { "action": "Open stop / interaction menu", "keys": "T", "detail": "Stop peds and vehicles" },
+        { "action": "Open miscellaneous menu", "keys": "Left Ctrl + T", "detail": "" },
+        { "action": "Open dispatch / backup menu", "keys": "B", "detail": "" },
+        { "action": "Open unit manager", "keys": "Left Ctrl + B", "detail": "" },
+        { "action": "Open felony stop menu", "keys": "U", "detail": "Manual mode" },
+        { "action": "Request panic backup", "keys": "I", "detail": "" },
+        { "action": "Request group backup", "keys": "O", "detail": "" },
+        { "action": "Partner enter / exit vehicle", "keys": "C", "detail": "" },
+        { "action": "K9 quick action", "keys": "X", "detail": "Door or attack" },
+        { "action": "Search nearby ped or vehicle", "keys": "Left Shift + F10", "detail": "" },
+        { "action": "Quick grab spikes", "keys": "Left Shift + G", "detail": "From your patrol car" },
+        { "action": "Start pursuit on aimed ped", "keys": "T", "detail": "While aiming at a ped" }
+      ]
+    },
+    "lspdfr": {
+      "title": "LSPDFR",
+      "source": "Typical LSPDFR defaults",
+      "binds": [
+        { "action": "Go on / off duty", "keys": "F4 then Duty", "detail": "On Enhanced the RPH console is often F4 and may be invisible" },
+        { "action": "Accept callout", "keys": "Y", "detail": "" },
+        { "action": "Backup menu", "keys": "B", "detail": "Vanilla LSPDFR backup" }
+      ]
+    }
+  }
+}

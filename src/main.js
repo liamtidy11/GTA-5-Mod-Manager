@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const config = require("./services/config");
@@ -35,6 +35,10 @@ const storageManager = require("./services/storage/storageManager");
 const managerBackup = require("./services/backup/managerBackup");
 const profileRecommendation = require("./services/profiles/profileRecommendation");
 const configIntelligence = require("./services/configIntelligence");
+const keybindReader = require("./services/knowledge/keybindReader");
+const dependencyDownload = require("./services/knowledge/dependencyDownload");
+const dutyLayoutFix = require("./services/knowledge/dutyLayoutFix");
+const runtimeCompatibility = require("./services/knowledge/runtimeCompatibility");
 const diagnosticsReport = require("./services/diagnostics/report");
 const selfCheck = require("./services/diagnostics/selfCheck");
 const logViewer = require("./services/diagnostics/logViewer");
@@ -131,15 +135,33 @@ function fullSessions(limit = 40) {
   }
 }
 
+function adoptRuntimeEvidence() {
+  try {
+    const cfg = config.load(userData());
+    runtimeCompatibility.adoptFromSessions({
+      dataDir: smartDataDir(),
+      dutyPath: cfg.sandboxPath,
+      sessions: fullSessions(20),
+      mods: managedList(),
+      catalog: builtInKnowledge(),
+    });
+  } catch {
+    /* local runtime evidence must not block health */
+  }
+}
+
 function modHealthList() {
   const cfg = config.load(userData());
+  adoptRuntimeEvidence();
   const sessions = fullSessions(40);
   const profiles = profileStore.listProfiles(profileRoot());
+  const runtimeDb = runtimeCompatibility.loadEvidence(smartDataDir());
   return managedList().map((mod) =>
     modHealthV2.evaluateModHealth(mod, {
       diagnosis: cfg.sandboxPath && exists(cfg.sandboxPath) ? diagnoseManagedMod(mod, { dutyPath: cfg.sandboxPath, dataDir: smartDataDir() }) : null,
       sessions,
       profiles,
+      runtime: runtimeCompatibility.lookup(runtimeDb, mod),
     })
   );
 }
@@ -160,6 +182,18 @@ function getSessions() {
     sessions = createSessionManager({
       root: sessionRoot(),
       onSessionFinalized: (session) => {
+        try {
+          const cfg = config.load(userData());
+          runtimeCompatibility.recordFromSession({
+            dataDir: smartDataDir(),
+            dutyPath: (session && session.dutyPath) || cfg.sandboxPath,
+            session,
+            mods: managedList(),
+            catalog: builtInKnowledge(),
+          });
+        } catch {
+          /* local runtime evidence must not break session finalize */
+        }
         if (!session || !session.crashActionId) return;
         const cfg = config.load(userData());
         crashActions.completeRetest(
@@ -259,6 +293,17 @@ function createWindow() {
 
 function snapshot() {
   const cfg = config.load(userData());
+  if (cfg.sandboxPath && exists(cfg.sandboxPath)) {
+    try {
+      const healed = dutyLayoutFix.healDutyLayout({ dutyPath: cfg.sandboxPath, dataDir: smartDataDir() });
+      if (healed && healed.changed) {
+        const n = (healed.moved || []).length + (healed.repaired || []).length + (healed.restored || []).length;
+        log("ok", `Smart Install moved ${n} pack file(s) into the Duty folders plugins expect.`);
+      }
+    } catch {
+      /* layout heal must not block the UI */
+    }
+  }
   const game = sandbox.status(cfg.officialPath, cfg.sandboxPath);
   const rawMods = cfg.sandboxPath && exists(cfg.sandboxPath) ? registry.load(cfg.sandboxPath).mods : [];
   const tests =
@@ -542,6 +587,9 @@ ipcMain.handle("smart:analyze", async (_event, sourcePath) => {
       stagingRoot: smartStagingRoot(),
       officialPath: cfg.officialPath,
       legacyOwnersOf: (destRel) => registry.ownersOf(cfg.sandboxPath, destRel),
+      lookupGuides: cfg.lookupInstallGuides !== false,
+      aiApiKey: cfg.aiGuideEnabled ? cfg.aiApiKey : "",
+      aiApiUrl: cfg.aiApiUrl || "",
     });
     if (preview.duplicate && (preview.duplicate.relation === "UPDATE" || preview.duplicate.relation === "DOWNGRADE")) {
       const installedId = (preview.duplicate.installed && preview.duplicate.installed.id) || preview.installId;
@@ -1014,6 +1062,7 @@ ipcMain.handle("mods:details", async (_event, installId) => {
         diagnosis: cfg.sandboxPath && exists(cfg.sandboxPath) ? diagnoseManagedMod(mod, { dutyPath: cfg.sandboxPath, dataDir: smartDataDir() }) : null,
         sessions,
         profiles,
+        runtime: runtimeCompatibility.getEvidence(smartDataDir(), mod),
       })
     : null;
   const graph = dependencyGraph.build({ mods: managedList(), database: builtInKnowledge() });
@@ -1031,6 +1080,12 @@ ipcMain.handle("mods:details", async (_event, installId) => {
     knowledge: userKnowledge.resolveMod({ mod: mod || manifest || { installId }, userEntry, builtIn }),
     userEntry,
     configs: cfg.sandboxPath ? configIntelligence.describeManagedConfigs(mod || manifest || { id: installId, files: [] }, { dutyPath: cfg.sandboxPath, dataDir: smartDataDir() }) : [],
+    keybinds: keybindReader.readKeybinds({
+      mod: mod || {},
+      manifest: manifest || {},
+      dutyPath: cfg.sandboxPath || "",
+      canonicalModId: (manifest && manifest.canonicalModId) || (mod && mod.canonicalModId) || "",
+    }),
   };
 });
 
@@ -1062,6 +1117,84 @@ ipcMain.handle("deps:impact", async (_event, installId) => {
     dependents: dependencyGraph.impactOfDisabling(graph, installId),
     requiredDependents: dependencyGraph.requiredDependents(graph, installId),
   };
+});
+
+ipcMain.handle("deps:offers", async (_event, payload = {}) => {
+  if (Array.isArray(payload.dependencies)) return dependencyDownload.offersFor(payload.dependencies);
+  return dependencyDownload.offersForNames(payload.names || []);
+});
+
+ipcMain.handle("deps:openPage", async (_event, url) => {
+  if (!dependencyDownload.isPageUrlAllowed(url)) {
+    throw new Error("That page is not on the allowed official host list.");
+  }
+  await shell.openExternal(url);
+  return true;
+});
+
+ipcMain.handle("deps:downloadInstall", async (_event, payload = {}) => {
+  const cfg = config.load(userData());
+  if (!cfg.sandboxPath) throw new Error("Finish setup before installing dependencies.");
+  const modId = payload.modId || payload.id;
+  if (dependencyDownload.isBlockedId(modId)) {
+    throw new Error("That component cannot be downloaded by the manager.");
+  }
+  const destDir = path.join(userData(), "dep-downloads", String(modId || "dep").replace(/[^\w.-]+/g, "_"));
+  send("progress", { done: 0, total: 4, file: "Looking up official release…" });
+  let downloaded;
+  try {
+    downloaded = await dependencyDownload.downloadTo({
+      modId,
+      destDir,
+      extractArchive: installer.extractArchive,
+    });
+  } catch (error) {
+    throw smartUserError(error);
+  }
+  send("progress", { done: 2, total: 4, file: `Installing ${downloaded.item.name} into Duty…` });
+  let preview;
+  try {
+    preview = await smartInstall.analyze({
+      source: downloaded.path,
+      dutyPath: cfg.sandboxPath,
+      dataDir: smartDataDir(),
+      stagingRoot: smartStagingRoot(),
+      officialPath: cfg.officialPath,
+      lookupGuides: false,
+    });
+  } catch (error) {
+    throw smartUserError(error);
+  }
+  const status = (preview.recommendation && preview.recommendation.status) || "";
+  if (status === "BLOCKED" || status === "UNSUPPORTED") {
+    if (preview.stagingDir) await smartInstall.discardStaging(preview.stagingDir);
+    throw new Error(
+      (preview.recommendation.reasons && preview.recommendation.reasons[0]) ||
+        `${downloaded.item.name} could not be installed safely.`
+    );
+  }
+  send("progress", { done: 3, total: 4, file: `Writing ${downloaded.item.name}…` });
+  try {
+    const manifest = await smartInstall.commit({
+      preview,
+      dutyPath: cfg.sandboxPath,
+      dataDir: smartDataDir(),
+      officialPath: cfg.officialPath,
+      checkRunning: true,
+      onProgress: (progress) => send("progress", progress),
+    });
+    try {
+      profileManager.markDrifted(v5Context(), [`${manifest.name} was installed as a dependency`]);
+    } catch {
+      /* drift tracking must not block */
+    }
+    log("ok", `Installed ${downloaded.item.name} into the Duty folder.`);
+    send("progress", { done: 4, total: 4, file: downloaded.item.name });
+    return { ok: true, name: downloaded.item.name, files: downloaded.files, manifest };
+  } catch (error) {
+    if (preview.stagingDir) await smartInstall.discardStaging(preview.stagingDir);
+    throw smartUserError(error);
+  }
 });
 
 ipcMain.handle("dashboard:get", async () => {
@@ -1243,6 +1376,10 @@ ipcMain.handle("settings:save", async (_event, patch = {}) => {
     "lastPage",
     "developerMode",
     "theme",
+    "lookupInstallGuides",
+    "aiGuideEnabled",
+    "aiApiKey",
+    "aiApiUrl",
   ];
   const clean = {};
   for (const key of allowed) {
@@ -1250,6 +1387,13 @@ ipcMain.handle("settings:save", async (_event, patch = {}) => {
   }
   if (Object.prototype.hasOwnProperty.call(clean, "theme")) {
     clean.theme = clean.theme === "bright" ? "bright" : "dark";
+  }
+  if (Object.prototype.hasOwnProperty.call(clean, "aiApiUrl")) {
+    const url = String(clean.aiApiUrl || "").trim();
+    clean.aiApiUrl = url && /^https:\/\//i.test(url) ? url : "";
+  }
+  if (Object.prototype.hasOwnProperty.call(clean, "aiApiKey") && !String(clean.aiApiKey || "").trim()) {
+    delete clean.aiApiKey;
   }
   const saved = config.save(userData(), clean);
   return { config: saved, state: snapshot() };
