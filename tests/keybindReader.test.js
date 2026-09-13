@@ -36,6 +36,33 @@ test("installed config wins over typical Policing Redefined defaults", () => {
   }
 });
 
+test("Callout Interface MDT key is read from the installed INI, not the catalog default", () => {
+  const duty = tmpDir("duty-ci-keys-");
+  writeFile(
+    duty,
+    "plugins/LSPDFR/CalloutInterface.ini",
+    "[Controls]\nToggleTerminalKey=Insert\nCalloutMenuKey=F8\n"
+  );
+  try {
+    const info = keybindReader.readKeybinds({
+      canonicalModId: "callout-interface",
+      dutyPath: duty,
+      mod: { files: [{ destination: "plugins/LSPDFR/CalloutInterface.dll" }] },
+    });
+    assert.equal(info.fromConfig, true);
+    const mdt = info.binds.find((row) => /toggle terminal/i.test(row.action));
+    assert.ok(mdt);
+    assert.equal(mdt.keys, "Insert");
+    assert.equal(info.binds.some((row) => row.source === "typical"), false);
+  } finally {
+    cleanup(duty);
+  }
+});
+
+test("NumPad keys are pretty-printed", () => {
+  assert.equal(keybindReader.prettyKeys("NumPad6"), "NumPad 6");
+});
+
 test("Policing Redefined details fall back to typical defaults when settings are empty", () => {
   const info = keybindReader.readKeybinds({ canonicalModId: "policing-redefined", dutyPath: "", manifest: { files: [] } });
   assert.equal(info.typicalUsed, true);

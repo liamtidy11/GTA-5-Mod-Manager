@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, safeStorage } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const config = require("./services/config");
@@ -39,12 +39,26 @@ const keybindReader = require("./services/knowledge/keybindReader");
 const dependencyDownload = require("./services/knowledge/dependencyDownload");
 const dutyLayoutFix = require("./services/knowledge/dutyLayoutFix");
 const runtimeCompatibility = require("./services/knowledge/runtimeCompatibility");
+const runtimeRuleStore = require("./services/knowledge/runtimeRuleStore");
+const runtimeVerify = require("./services/knowledge/runtimeVerify");
+const runtimeEvidence = require("./services/knowledge/runtimeEvidence");
+const modCondition = require("./services/knowledge/modCondition");
+const conditionFix = require("./services/knowledge/conditionFix");
+const workshopService = require("./services/workshop/workshopService");
+const workshopLibrary = require("./services/workshop/userLibrary");
+const workshopInbox = require("./services/workshop/downloadInbox");
+const workshopSecrets = require("./services/workshop/secretStore");
+const { apiStatus } = require("./services/workshop/providers/lcpdfrProvider");
+const { isAllowedSourceUrl } = require("./services/workshop/providers/providerTypes");
+const environmentInventory = require("./services/environmentInventory");
+const discoveredMods = require("./services/discoveredMods");
 const diagnosticsReport = require("./services/diagnostics/report");
 const selfCheck = require("./services/diagnostics/selfCheck");
 const logViewer = require("./services/diagnostics/logViewer");
 const { compareSessions } = require("./services/crash/sessionComparator");
 const smartAudit = require("./services/smartAudit");
 const { diagnoseManagedMod } = require("./services/orphanDetector");
+const { appIconPath } = require("./services/appIcon");
 const pkg = require("../package.json");
 
 let win = null;
@@ -80,6 +94,76 @@ function profileRoot() {
 
 function snapshotRoot() {
   return path.join(userData(), "snapshots");
+}
+
+function workshopDir() {
+  return workshopService.workshopRoot(userData());
+}
+
+function workshopCipher() {
+  return {
+    available: () => {
+      try {
+        return safeStorage.isEncryptionAvailable();
+      } catch {
+        return false;
+      }
+    },
+    encrypt: (value) => safeStorage.encryptString(String(value)).toString("base64"),
+    decrypt: (value) => safeStorage.decryptString(Buffer.from(String(value), "base64")),
+  };
+}
+
+function workshopSecretStore() {
+  return workshopSecrets.createSecretStore(workshopDir(), workshopCipher());
+}
+
+function workshopContext() {
+  const cfg = config.load(userData());
+  const healthRows = (() => {
+    try {
+      return modHealthList();
+    } catch {
+      return [];
+    }
+  })();
+  const healthByCanonical = new Map();
+  for (const row of healthRows) {
+    const mod = managedList().find((item) => item.id === row.installId);
+    if (mod && mod.canonicalModId) healthByCanonical.set(mod.canonicalModId, row);
+  }
+  let inventory = null;
+  try {
+    if (cfg.sandboxPath && exists(cfg.sandboxPath)) {
+      inventory = environmentInventory.getInventory({ dutyPath: cfg.sandboxPath, dataDir: smartDataDir() });
+    }
+  } catch {
+    inventory = null;
+  }
+  let profile = null;
+  try {
+    profile = profileManager.activeSummary(v5Context());
+    profile = profile && profile.profile;
+  } catch {
+    profile = null;
+  }
+  const secrets = workshopSecretStore();
+  return workshopService.createContext({
+    userData: userData(),
+    workshopRoot: workshopDir(),
+    mods: managedList(),
+    inventory,
+    database: builtInKnowledge(),
+    userKnowledgeGet: (keys) => userKnowledge.getEntry(smartDataDir(), keys),
+    healthByCanonical,
+    profile,
+    apiKey: secrets.getLcpdfrKey(),
+    downloadDir: cfg.workshopDownloadDirectory || workshopService.defaultDownloadDir(),
+    watchDownloads: cfg.workshopWatchDownloads === true,
+    openSourceLinks: cfg.workshopOpenSourceLinks !== false,
+    cacheRetentionHours: Number(cfg.workshopCacheRetentionHours) || 24,
+    settings: { watchDownloads: cfg.workshopWatchDownloads === true },
+  });
 }
 
 function v5Context(extras = {}) {
@@ -126,6 +210,19 @@ function managedList() {
   return smartInstall.list(smartDataDir(), cfg.sandboxPath);
 }
 
+function folderModList() {
+  const cfg = config.load(userData());
+  if (!cfg.sandboxPath || !exists(cfg.sandboxPath)) return [];
+  const registryMods = registry.load(cfg.sandboxPath).mods;
+  const discovered = discoveredMods.list({
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+    smartMods: managedList(),
+    database: builtInKnowledge(),
+  });
+  return discoveredMods.merge(registryMods, discovered);
+}
+
 function fullSessions(limit = 40) {
   try {
     const rows = getSessions().getRecentSessions(limit);
@@ -150,20 +247,45 @@ function adoptRuntimeEvidence() {
   }
 }
 
-function modHealthList() {
+function analysisContext(folderMods = null) {
   const cfg = config.load(userData());
   adoptRuntimeEvidence();
-  const sessions = fullSessions(40);
-  const profiles = profileStore.listProfiles(profileRoot());
-  const runtimeDb = runtimeCompatibility.loadEvidence(smartDataDir());
-  return managedList().map((mod) =>
-    modHealthV2.evaluateModHealth(mod, {
-      diagnosis: cfg.sandboxPath && exists(cfg.sandboxPath) ? diagnoseManagedMod(mod, { dutyPath: cfg.sandboxPath, dataDir: smartDataDir() }) : null,
-      sessions,
-      profiles,
-      runtime: runtimeCompatibility.lookup(runtimeDb, mod),
-    })
-  );
+  const rawMods = folderMods || folderModList();
+  return {
+    folderMods: rawMods,
+    smartMods: managedList(),
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+    sessions: fullSessions(40),
+    profiles: profileStore.listProfiles(profileRoot()),
+    runtimeDb: runtimeCompatibility.loadEvidence(smartDataDir()),
+    database: builtInKnowledge(),
+  };
+}
+
+function analyzeEveryMod(folderMods = null) {
+  return modCondition.analyzeAll(analysisContext(folderMods));
+}
+
+function lampFolderMods(rawMods, analysis) {
+  return (rawMods || []).map((mod, index) => {
+    const row = analysis && analysis.folder && analysis.folder[index];
+    if (!row) return mod;
+    return {
+      ...mod,
+      lamp: row.lamp,
+      lampLabel: row.lampLabel,
+      lampDetail: row.lampDetail,
+      healthStatus: row.status,
+      healthReasons: row.reasons,
+      mdt: row.mdt || null,
+      keybinds: row.keybinds || null,
+    };
+  });
+}
+
+function modHealthList() {
+  return analyzeEveryMod().smart;
 }
 
 function missingRequiredDeps() {
@@ -266,6 +388,7 @@ function log(level, message) {
 }
 
 function createWindow() {
+  const icon = appIconPath();
   win = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -273,6 +396,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: "#0B0D10",
     title: "GTA V Mod Manager",
+    icon: icon || undefined,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -305,12 +429,18 @@ function snapshot() {
     }
   }
   const game = sandbox.status(cfg.officialPath, cfg.sandboxPath);
-  const rawMods = cfg.sandboxPath && exists(cfg.sandboxPath) ? registry.load(cfg.sandboxPath).mods : [];
+  const rawMods = folderModList();
   const tests =
     cfg.sandboxPath && exists(cfg.sandboxPath)
       ? health.runChecks(cfg.sandboxPath, cfg.officialPath, { dataDir: smartDataDir() })
       : null;
-  const mods = cfg.sandboxPath ? health.withModStatus(cfg.sandboxPath, rawMods) : rawMods;
+  let analysis = { folder: [], counts: { HEALTHY: 0, WARNING: 0, BROKEN: 0, DISABLED: 0, UNKNOWN: 0 }, advice: [] };
+  try {
+    analysis = analyzeEveryMod(rawMods);
+  } catch {
+    /* condition lamps must not block the UI */
+  }
+  const mods = lampFolderMods(rawMods, analysis);
   return {
     config: cfg,
     game,
@@ -335,10 +465,19 @@ function snapshot() {
         return null;
       }
     })(),
+    modAnalysis: {
+      at: analysis.at,
+      counts: analysis.counts,
+      advice: analysis.advice,
+      todos: analysis.todos || [],
+    },
   };
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("com.gtav.modmanager.personal");
+  }
   createWindow();
   try {
     getSessions().reconcileIncomplete();
@@ -1049,7 +1188,75 @@ ipcMain.handle("update:restoreKnownGood", async (_event, installId) => {
   return { ...result, state: snapshot() };
 });
 
+function publicAnalysis(analysis, extras = {}) {
+  return {
+    at: analysis.at,
+    counts: analysis.counts,
+    advice: analysis.advice,
+    summary: analysis.summary,
+    todos: analysis.todos || (analysis.summary || []).filter((row) => row.nextStep && row.nextStep.needed),
+    fixableCount: analysis.fixableCount || 0,
+    aiBrief: extras.aiBrief || "",
+    usedAi: Boolean(extras.aiBrief),
+  };
+}
+
+async function applyConditionPlans(plans) {
+  const cfg = config.load(userData());
+  conditionFix.assertDutyOnly({ dutyPath: cfg.sandboxPath, officialPath: cfg.officialPath });
+  try {
+    snapshotManager.create(v5Context(), { reason: snapshotManager.REASONS.BEFORE_REPAIR });
+  } catch {
+    /* snapshot must not block a local repair */
+  }
+  const report = await conditionFix.applyPlans(plans, {
+    dutyPath: cfg.sandboxPath,
+    dataDir: smartDataDir(),
+    officialPath: cfg.officialPath,
+    repair: (payload) => smartInstall.repair(payload),
+    setEnabled: (payload) => smartInstall.setEnabled(payload),
+    healDutyLayout: (payload) => dutyLayoutFix.healDutyLayout(payload),
+  });
+  try {
+    profileManager.markDrifted(v5Context(), ["Analyze Mods applied a local fix"]);
+  } catch {
+    /* drift flag must not block repair */
+  }
+  if (report.fixed) {
+    log("ok", `Analyze Mods: applied ${report.fixed} local fix(es).`);
+  }
+  return { report, analysis: publicAnalysis(analyzeEveryMod()) };
+}
+
 ipcMain.handle("mods:health", async () => modHealthList());
+
+ipcMain.handle("mods:analyzeAll", async () => publicAnalysis(analyzeEveryMod()));
+
+ipcMain.handle("mods:fixOne", async (_event, { installId, source } = {}) => {
+  const analysis = analyzeEveryMod();
+  const plan = (analysis.summary || []).find(
+    (row) => row.installId === installId && (!source || row.source === source)
+  );
+  if (!plan || !plan.fix || !plan.fix.fixable) {
+    return {
+      report: { results: [], fixed: 0, failed: 0, healed: null },
+      analysis: publicAnalysis(analysis),
+      message: (plan && plan.fix && plan.fix.reason) || "No automatic fix is available.",
+    };
+  }
+  return applyConditionPlans([{ ...plan.fix, installId: plan.installId, name: plan.name, source: plan.source }]);
+});
+
+ipcMain.handle("mods:fixAll", async () => {
+  const analysis = analyzeEveryMod();
+  const plans = (analysis.summary || [])
+    .filter((row) => row.fix && row.fix.fixable)
+    .map((row) => ({ ...row.fix, installId: row.installId, name: row.name, source: row.source }));
+  if (!plans.length) {
+    return { report: { results: [], fixed: 0, failed: 0, healed: null }, analysis: publicAnalysis(analysis) };
+  }
+  return applyConditionPlans(plans);
+});
 
 ipcMain.handle("mods:details", async (_event, installId) => {
   const cfg = config.load(userData());
@@ -1058,11 +1265,15 @@ ipcMain.handle("mods:details", async (_event, installId) => {
   const sessions = fullSessions(40);
   const profiles = profileStore.listProfiles(profileRoot());
   const health = mod
-    ? modHealthV2.evaluateModHealth(mod, {
-        diagnosis: cfg.sandboxPath && exists(cfg.sandboxPath) ? diagnoseManagedMod(mod, { dutyPath: cfg.sandboxPath, dataDir: smartDataDir() }) : null,
+    ? modCondition.evaluateOne(mod, {
+        source: "SMART",
+        dutyPath: cfg.sandboxPath,
+        dataDir: smartDataDir(),
         sessions,
         profiles,
-        runtime: runtimeCompatibility.getEvidence(smartDataDir(), mod),
+        runtimeDb: runtimeCompatibility.loadEvidence(smartDataDir()),
+        database: builtInKnowledge(),
+        smartMods: managedList(),
       })
     : null;
   const graph = dependencyGraph.build({ mods: managedList(), database: builtInKnowledge() });
@@ -1085,7 +1296,43 @@ ipcMain.handle("mods:details", async (_event, installId) => {
       manifest: manifest || {},
       dutyPath: cfg.sandboxPath || "",
       canonicalModId: (manifest && manifest.canonicalModId) || (mod && mod.canonicalModId) || "",
+      database: builtInKnowledge(),
     }),
+    mdt: (health && health.mdt) || null,
+    runtimeRule: runtimeRuleStore.findUserRule(runtimeRuleStore.loadUser(smartDataDir()), mod || { id: installId }),
+    runtimeHistory: runtimeEvidence.versionHistory(runtimeCompatibility.loadEvidence(smartDataDir()), installId),
+    runtimeSuggestions: (() => {
+      try {
+        const log = runtimeCompatibility.readSessionLogs(sessions[0] || null, cfg.sandboxPath);
+        return runtimeVerify.suggestSignals(mod || { id: installId }, log, builtInKnowledge());
+      } catch {
+        return [];
+      }
+    })(),
+  };
+});
+
+ipcMain.handle("runtime:setRule", async (_event, { installId, canonicalModId, contains, source, match } = {}) => {
+  try {
+    const rule = runtimeRuleStore.setUserRule(smartDataDir(), { installId, canonicalModId, contains, source, match });
+    return { rule, analysis: publicAnalysis(analyzeEveryMod()) };
+  } catch (error) {
+    return { error: error.message };
+  }
+});
+
+ipcMain.handle("runtime:clearRule", async (_event, { installId, canonicalModId } = {}) => {
+  runtimeRuleStore.clearUserRule(smartDataDir(), installId || canonicalModId);
+  return { ok: true, analysis: publicAnalysis(analyzeEveryMod()) };
+});
+
+ipcMain.handle("runtime:suggest", async (_event, installId) => {
+  const cfg = config.load(userData());
+  const mod = managedList().find((row) => row.id === installId);
+  const log = runtimeCompatibility.readSessionLogs(fullSessions(1)[0] || null, cfg.sandboxPath);
+  return {
+    suggestions: mod ? runtimeVerify.suggestSignals(mod, log, builtInKnowledge()) : [],
+    rule: runtimeRuleStore.findUserRule(runtimeRuleStore.loadUser(smartDataDir()), mod || { id: installId }),
   };
 });
 
@@ -1200,7 +1447,8 @@ ipcMain.handle("deps:downloadInstall", async (_event, payload = {}) => {
 ipcMain.handle("dashboard:get", async () => {
   const cfg = config.load(userData());
   const tests = cfg.sandboxPath && exists(cfg.sandboxPath) ? health.runChecks(cfg.sandboxPath, cfg.officialPath, { dataDir: smartDataDir() }) : null;
-  const modHealth = modHealthList();
+  const analysis = analyzeEveryMod();
+  const modHealth = analysis.smart;
   const profile = (() => {
     try {
       return profileManager.activeSummary(v5Context());
@@ -1211,14 +1459,14 @@ ipcMain.handle("dashboard:get", async () => {
   const missing = missingRequiredDeps();
   const dutyHealth = dutyHealthV2.summarize({ tests, modHealth, profile, overlays: overlays.overlayStatus(), missingRequiredDeps: missing });
   const alerts = dutyHealthV2.priorityAlerts({ tests, modHealth, profile, missingRequiredDeps: missing });
-  const counts = modHealthV2.summarizeCounts(modHealth);
+  const counts = analysis.counts;
   const recentChanges = smartAudit.readAudit(smartDataDir(), 6).reverse();
   return {
     dutyHealth,
     alerts,
     counts,
     recentChanges,
-    startupSummary: dutyHealthV2.startupSummary({ dutyFound: Boolean(cfg.sandboxPath && exists(cfg.sandboxPath)), profile, tests, modCount: modHealth.length, lastSession: lastSessionSummary() }),
+    startupSummary: dutyHealthV2.startupSummary({ dutyFound: Boolean(cfg.sandboxPath && exists(cfg.sandboxPath)), profile, tests, modCount: (analysis.rows || []).length, lastSession: lastSessionSummary() }),
     appHealth: selfCheck.run(v6Context()).appHealth,
   };
 });
@@ -1362,7 +1610,76 @@ ipcMain.handle("session:compareLastClean", async (_event, sessionId) => {
   return compareSessions(session, history);
 });
 
-ipcMain.handle("settings:get", async () => config.load(userData()));
+ipcMain.handle("workshop:browse", async (_event, query = {}) => workshopService.browse(workshopContext(), query || {}));
+
+ipcMain.handle("workshop:details", async (_event, workshopId) => workshopService.details(workshopContext(), workshopId));
+
+ipcMain.handle("workshop:getMod", async (_event, workshopId) => {
+  const ctx = workshopContext();
+  const result = workshopService.getMod(ctx, workshopId);
+  if (result.ok && ctx.openSourceLinks !== false && result.sourceUrl && isAllowedSourceUrl(result.sourceUrl)) {
+    await shell.openExternal(result.sourceUrl);
+    result.opened = true;
+  } else {
+    result.opened = false;
+  }
+  return result;
+});
+
+ipcMain.handle("workshop:evaluateHandoff", async (_event, payload) => workshopService.evaluateHandoff(payload || {}));
+
+ipcMain.handle("workshop:favoriteToggle", async (_event, workshopId) => workshopLibrary.toggleFavorite(workshopDir(), workshopId));
+
+ipcMain.handle("workshop:library", async () => workshopLibrary.load(workshopDir()));
+
+ipcMain.handle("workshop:collectionCreate", async (_event, name) => workshopLibrary.createCollection(workshopDir(), name));
+
+ipcMain.handle("workshop:collectionAdd", async (_event, payload) =>
+  workshopLibrary.addToCollection(workshopDir(), payload && payload.collectionId, payload && payload.workshopId)
+);
+
+ipcMain.handle("workshop:collectionRemove", async (_event, payload) =>
+  workshopLibrary.removeFromCollection(workshopDir(), payload && payload.collectionId, payload && payload.workshopId)
+);
+
+ipcMain.handle("workshop:inbox", async () => {
+  const ctx = workshopContext();
+  const existing = workshopInbox.load(ctx.workshopRoot);
+  if (ctx.watchDownloads && existing.watch) {
+    workshopInbox.scan(ctx.workshopRoot, ctx.downloadDir);
+  }
+  return {
+    items: workshopInbox.listWatchedNew(ctx.workshopRoot),
+    watch: workshopInbox.load(ctx.workshopRoot).watch,
+    downloadDir: ctx.downloadDir,
+  };
+});
+
+ipcMain.handle("workshop:inboxIgnore", async (_event, filePath) => {
+  workshopInbox.ignore(workshopDir(), filePath);
+  return { items: workshopInbox.list(workshopDir()) };
+});
+
+ipcMain.handle("workshop:apiStatus", async () => {
+  const secrets = workshopSecretStore();
+  return apiStatus({ apiKey: secrets.getLcpdfrKey(), encryptionAvailable: secrets.available() });
+});
+
+ipcMain.handle("workshop:setApiKey", async (_event, key) => {
+  const secrets = workshopSecretStore();
+  const result = secrets.setLcpdfrKey(key);
+  return { ...result, ...apiStatus({ apiKey: secrets.getLcpdfrKey(), encryptionAvailable: secrets.available() }) };
+});
+
+ipcMain.handle("settings:get", async () => {
+  const cfg = config.load(userData());
+  const secrets = workshopSecretStore();
+  return {
+    ...cfg,
+    lcpdfrApiConfigured: secrets.configured(),
+    workshopApi: apiStatus({ apiKey: secrets.getLcpdfrKey(), encryptionAvailable: secrets.available() }),
+  };
+});
 
 ipcMain.handle("settings:save", async (_event, patch = {}) => {
   const allowed = [
@@ -1380,6 +1697,10 @@ ipcMain.handle("settings:save", async (_event, patch = {}) => {
     "aiGuideEnabled",
     "aiApiKey",
     "aiApiUrl",
+    "workshopDownloadDirectory",
+    "workshopWatchDownloads",
+    "workshopCacheRetentionHours",
+    "workshopOpenSourceLinks",
   ];
   const clean = {};
   for (const key of allowed) {
@@ -1394,6 +1715,13 @@ ipcMain.handle("settings:save", async (_event, patch = {}) => {
   }
   if (Object.prototype.hasOwnProperty.call(clean, "aiApiKey") && !String(clean.aiApiKey || "").trim()) {
     delete clean.aiApiKey;
+  }
+  if (Object.prototype.hasOwnProperty.call(clean, "workshopDownloadDirectory")) {
+    clean.workshopDownloadDirectory = String(clean.workshopDownloadDirectory || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(clean, "workshopCacheRetentionHours")) {
+    const hours = Number(clean.workshopCacheRetentionHours);
+    clean.workshopCacheRetentionHours = Number.isFinite(hours) ? Math.min(168, Math.max(1, hours)) : 24;
   }
   const saved = config.save(userData(), clean);
   return { config: saved, state: snapshot() };

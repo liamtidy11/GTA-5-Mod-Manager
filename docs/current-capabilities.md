@@ -21,9 +21,12 @@ Personal GTA V Enhanced / LSPDFR manager. Duty (sandbox) and Online (official St
 - Profile drift detection (no silent rewrite)
 - Personal knowledge overrides
 - Unified mod health and Duty health reasons
+- Generic runtime verification for every managed plugin (manifest DLL ownership, built-in or local rules, then generic load/service/callout signals). Unknown stays yellow until explicit success or failure.
+- Duty-wide log scan: RPH, LSPDFR, ASI, ScriptHook, rotated `Logs\`, and per-plugin `.log` files inside the Duty folder only. Folder plugin/ASI packs use the same in-game proof as Smart Install.
 - Diagnostic report export (redacted)
 - Manager metadata backup export/import
 - Safe storage cleanup of unused manager files
+- Browse Mods workshop: local catalog, official source links, import into Smart Install, optional Downloads inbox
 
 ## Recognized but not automatically installable
 
@@ -39,7 +42,7 @@ The manager can identify assets, slots, and metadata, and it will say so. Automa
 - Online / official Steam folder modding
 - Automatic encrypted RPF modification
 - OpenIV automation
-- Cloud profiles, public sharing, or a mod marketplace
+- Cloud profiles, public sharing, or a hosted mod marketplace (Browse Mods is local discovery + official links only)
 - Automatic community compatibility or telemetry
 - Payments, accounts, or licensing
 - Killing GTA / RPH when the manager restarts

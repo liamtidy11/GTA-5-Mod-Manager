@@ -213,9 +213,12 @@ test("mod health is unified and always explains itself", () => {
   assert.equal(broken.status, "BROKEN");
   assert.match(broken.reasons[0], /manifest/i);
 
-  const warn = modHealthV2.evaluateModHealth({ id: "m", enabled: true, compatibilityStatus: "UNKNOWN" }, { sessions, profiles });
+  const warn = modHealthV2.evaluateModHealth(
+    { id: "m", enabled: true, compatibilityStatus: "UNKNOWN", files: [{ destination: "plugins/LSPDFR/M.dll" }] },
+    { sessions, profiles }
+  );
   assert.equal(warn.status, "WARNING");
-  assert.ok(warn.reasons.some((r) => /compatibility.*unknown/i.test(r)));
+  assert.ok(warn.reasons.some((r) => /waiting for runtime/i.test(r)));
   assert.deepEqual(warn.profiles, ["Stable Patrol"]);
   assert.equal(warn.crash.failed, 2);
   assert.equal(warn.crash.clean, 1);

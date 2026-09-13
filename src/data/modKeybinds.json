@@ -20,6 +20,16 @@
         { "action": "Start pursuit on aimed ped", "keys": "T", "detail": "While aiming at a ped" }
       ]
     },
+    "callout-interface": {
+      "title": "Callout Interface",
+      "source": "Installed CalloutInterface.ini",
+      "configFiles": ["plugins/LSPDFR/CalloutInterface.ini"],
+      "binds": [
+        { "action": "Open callout menu", "keys": "F8", "detail": "RageNativeUI menu" },
+        { "action": "Toggle MDT / terminal", "keys": "NumPad 6", "detail": "Hold to show the mouse. Num Lock on." },
+        { "action": "Force a random callout", "keys": "Left Ctrl + F9", "detail": "" }
+      ]
+    },
     "lspdfr": {
       "title": "LSPDFR",
       "source": "Typical LSPDFR defaults",

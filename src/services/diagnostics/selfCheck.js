@@ -90,7 +90,18 @@ function run(context = {}) {
   const failedCritical = checks.some((c) => !c.ok && c.level === "bad");
   const failedWarn = checks.some((c) => !c.ok && c.level === "warn");
   const appHealth = failedCritical ? "BROKEN" : failedWarn ? "WARNING" : "HEALTHY";
-  return { appHealth, checks };
+  let dutyWarnings = [];
+  if (context.dutyPath) {
+    try {
+      dutyWarnings = require("../knowledge/dutyWarnings").summarize({
+        dutyPath: context.dutyPath,
+        dataDir: context.dataDir,
+      }).items;
+    } catch {
+      dutyWarnings = [];
+    }
+  }
+  return { appHealth, checks, dutyWarnings };
 }
 
 module.exports = { run };

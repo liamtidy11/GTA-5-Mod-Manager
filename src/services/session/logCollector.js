@@ -4,6 +4,8 @@ const { hashBuffer, hashString } = require("../hashUtil");
 const { LOG_TAIL_LINES } = require("./sessionTypes");
 const { scanLogText } = require("./logSignals");
 
+const dutyLogScan = require("../knowledge/dutyLogScan");
+
 const DUTY_LOGS = [
   "RagePluginHook.log",
   path.join("plugins", "LSPDFR", "RagePluginHook.log"),
@@ -30,10 +32,22 @@ function fileMeta(filePath) {
 function locateLogs(dutyPath) {
   const found = [];
   if (!dutyPath) return found;
+  const seen = new Set();
   for (const rel of DUTY_LOGS) {
     const abs = path.join(dutyPath, rel);
     const meta = fileMeta(abs);
-    if (meta) found.push(meta);
+    if (meta) {
+      seen.add(abs.toLowerCase());
+      found.push(meta);
+    }
+  }
+  for (const abs of dutyLogScan.discoverDutyLogs(dutyPath)) {
+    if (seen.has(abs.toLowerCase())) continue;
+    const meta = fileMeta(abs);
+    if (meta) {
+      seen.add(abs.toLowerCase());
+      found.push(meta);
+    }
   }
   return found;
 }

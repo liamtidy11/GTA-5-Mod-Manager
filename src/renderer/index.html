@@ -7,6 +7,7 @@
       content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:"
     />
     <title>GTA V Mod Manager</title>
+    <link rel="icon" type="image/png" href="app-icon.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -31,6 +32,7 @@
       </header>
       <nav class="app-nav" aria-label="Main">
           <button class="nav-btn is-active" data-page="dashboard" type="button">Dashboard</button>
+          <button class="nav-btn" data-page="browse" type="button">Browse Mods</button>
           <button class="nav-btn" data-page="mods" type="button">Mods</button>
           <button class="nav-btn" data-page="profiles" type="button">Profiles</button>
           <button class="nav-btn" data-page="recovery" type="button">Recovery</button>
@@ -179,6 +181,47 @@
               </section>
             </section>
 
+            <div id="page-browse" class="hidden">
+              <section class="card workshop-page">
+                <p class="section-label">Browse LSPDFR mods</p>
+                <div class="mods-toolbar workshop-search">
+                  <label class="sr-only" for="workshop-search">Search mods</label>
+                  <input id="workshop-search" type="search" placeholder="Search mods…" autocomplete="off" />
+                  <select id="workshop-filter" aria-label="Filter mods">
+                    <option value="">All</option>
+                    <option value="FEATURED">Featured</option>
+                    <option value="ESSENTIAL">Essential</option>
+                    <option value="FAVORITES">Favorites</option>
+                    <option value="INSTALLED">Installed</option>
+                    <option value="NOT_INSTALLED">Not installed</option>
+                    <option value="UPDATES">Updates</option>
+                    <option value="ENHANCED">Enhanced</option>
+                    <option value="KNOWN_COMPATIBLE">Known compatible</option>
+                    <option value="UNKNOWN_COMPATIBILITY">Unknown compatibility</option>
+                    <option value="FRAMEWORKS">Frameworks</option>
+                    <option value="CALLOUTS">Callouts</option>
+                    <option value="PLUGINS">Plugins</option>
+                    <option value="VEHICLES">Vehicles</option>
+                  </select>
+                </div>
+                <div id="workshop-cats" class="workshop-cats"></div>
+                <p id="workshop-notice" class="muted workshop-notice"></p>
+                <div id="workshop-recommend" class="workshop-recommend"></div>
+                <div class="workshop-actions">
+                  <button id="workshop-import" class="ghost" type="button">Import Download</button>
+                  <button id="workshop-refresh" class="ghost" type="button">Refresh catalog</button>
+                </div>
+                <div id="workshop-list" class="mod-list workshop-list">
+                  <p class="empty">Loading catalog…</p>
+                </div>
+                <div class="workshop-inbox-wrap">
+                  <p class="section-label">Downloads inbox</p>
+                  <p class="fineprint">After you open a catalog page, new zip/rar/7z files from that download appear here. Nothing installs until you analyze and confirm.</p>
+                  <div id="workshop-inbox" class="workshop-inbox"><p class="muted">No new archives.</p></div>
+                </div>
+              </section>
+            </div>
+
             <div id="page-mods" class="hidden">
               <section class="card mods-page">
                 <div id="dropzone" class="dropzone" tabindex="0">
@@ -196,36 +239,27 @@
                   </div>
                 </div>
 
-                <div class="mods-switch" role="tablist" aria-label="Installed mods">
-                  <button id="mods-tab-folder" class="is-active" type="button" data-mods-panel="folder">
-                    Folder packs <span id="mod-count" class="count">0</span>
-                  </button>
-                  <button id="mods-tab-smart" type="button" data-mods-panel="smart">
-                    Smart Install <span id="smart-count" class="count">0</span>
-                  </button>
+                <div class="mods-condition">
+                  <p id="mods-condition-line" class="fineprint">Analyze mods lists only what you need to do.</p>
+                  <button id="btn-analyze-mods" class="ghost" type="button">Analyze mods</button>
                 </div>
 
-                <div id="mods-panel-folder" class="mods-panel">
-                  <div id="mod-list" class="mod-list">
-                    <p class="empty">Nothing installed yet.</p>
-                  </div>
-                </div>
-
-                <div id="mods-panel-smart" class="mods-panel hidden">
+                <div class="mods-panel">
                   <div class="mods-toolbar">
                     <label class="sr-only" for="mod-search">Search mods</label>
-                    <input id="mod-search" type="search" placeholder="Search…" autocomplete="off" />
+                    <input id="mod-search" type="search" placeholder="Search installed mods…" autocomplete="off" />
                     <select id="mod-filter" aria-label="Filter mods">
                       <option value="">All</option>
                       <option value="ENABLED">Enabled</option>
                       <option value="DISABLED">Disabled</option>
-                      <option value="WARNING">Warning</option>
+                      <option value="HEALTHY">Healthy</option>
+                      <option value="WARNING">Needs attention</option>
                       <option value="BROKEN">Broken</option>
-                      <option value="UNKNOWN">Unknown</option>
                     </select>
+                    <span id="mod-count" class="count">0</span>
                   </div>
-                  <div id="smart-mod-list" class="mod-list">
-                    <p class="empty">No Smart Install mods yet. Tick Preview first, then drop a plugin.</p>
+                  <div id="mod-list" class="mod-list">
+                    <p class="empty">Nothing installed yet.</p>
                   </div>
                 </div>
 

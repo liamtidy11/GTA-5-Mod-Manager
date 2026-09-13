@@ -18,6 +18,8 @@ const NEVER_OVERWRITE = new Set([
   "lspd first response.dll",
 ]);
 
+const pluginSupportLayout = require("./pluginSupportLayout");
+
 const DATA_PATH = path.join(__dirname, "..", "..", "data", "pluginDataFiles.json");
 
 function loadPluginData() {
@@ -171,13 +173,18 @@ function healDutyLayout({ dutyPath = "", dataDir = "" } = {}) {
   const relocated = relocateWrapperTrees(dutyPath);
   const repaired = repairManifestDests({ dutyPath, dataDir });
   const restored = restoreRequiredPluginData({ dutyPath, dataDir });
+  const cleared = pluginSupportLayout.clearStraySupportDlls(dutyPath);
+  const mirrored = pluginSupportLayout.mirrorPluginLibraries(dutyPath);
   return {
     ok: true,
     moved: relocated.moved,
     skipped: relocated.skipped,
     repaired,
     restored,
-    changed: Boolean(relocated.moved.length || repaired.length || restored.length),
+    removedSupport: cleared.removed,
+    mirroredLibraries: mirrored.copied,
+    removedLibraries: mirrored.removed || [],
+    changed: Boolean(relocated.moved.length || repaired.length || restored.length || cleared.changed || mirrored.changed),
   };
 }
 

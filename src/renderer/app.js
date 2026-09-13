@@ -20,8 +20,8 @@ const ui = {
   healthDetail: $("label-health"),
   lampHealth: $("lamp-health"),
   smartToggle: $("smart-toggle"),
-  smartMods: $("smart-mod-list"),
-  smartCount: $("smart-count"),
+  smartMods: $("mod-list"),
+  smartCount: $("mod-count"),
   lampSession: $("lamp-session"),
   sessionResult: $("label-session-result"),
   sessionDetail: $("label-session-detail"),
@@ -68,6 +68,9 @@ let smartMods = [];
 let modHealthById = new Map();
 let currentPage = "dashboard";
 let previewDefaultApplied = false;
+let workshopHandoff = null;
+let workshopInboxTimer = null;
+let lastWorkshopInboxPrompt = "";
 
 function shortPath(value) {
   if (!value) return "Not set";
@@ -114,28 +117,21 @@ const KIND_LABELS = {
   lml: "Lenny's Mod Loader",
 };
 
-const SMART_SECTIONS = [
-  { id: "lspdfr", title: "LSPDFR plugins", match: ["lspdfr_plugin", "lspdfr"] },
-  { id: "rage", title: "Rage Plugin Hook", match: ["rage_plugin", "rage"] },
-  { id: "script", title: "Scripts / ASI", match: ["asi", "script"] },
+const MOD_SECTIONS = [
+  { id: "lspdfr", title: "LSPDFR plugins", match: ["lspdfr", "lspdfr_plugin"] },
+  { id: "rage", title: "Rage Plugin Hook", match: ["rage", "rage_plugin"] },
   { id: "dependency", title: "Dependencies", match: ["dependency"] },
+  { id: "script", title: "Scripts / ASI", match: ["script", "asi"] },
   { id: "vehicle", title: "Cars", match: ["vehicle"] },
   { id: "map", title: "Buildings / maps", match: ["map"] },
   { id: "audio", title: "Sound packs", match: ["audio"] },
+  { id: "uniform", title: "Uniforms", match: ["uniform"] },
   { id: "els", title: "ELS", match: ["els"] },
-  { id: "other", title: "Other", match: [] },
+  { id: "other", title: "Other", match: ["gameconfig", "lml", "oiv"] },
 ];
 
-const TYPE_SECTIONS = [
-  { id: "lspdfr", title: "LSPDFR", hint: "Rage Plugin Hook and LSPD First Response. Keep this enabled.", match: ["lspdfr", "rage"] },
-  { id: "script", title: "Scripts / ASI", hint: "Root scripts such as DirectStorageFix. Not GTA Online.", match: ["script"] },
-  { id: "vehicle", title: "Cars", hint: "Addon or replacement vehicles for Story Mode.", match: ["vehicle"] },
-  { id: "map", title: "Buildings / maps", hint: "Stations, interiors, and world edits.", match: ["map"] },
-  { id: "audio", title: "Sound packs", hint: "Sirens and scanner audio. LSPDFR’s own scanner stays with LSPDFR.", match: ["audio"] },
-  { id: "uniform", title: "Uniforms", hint: "EUP and wardrobe packs.", match: ["uniform"] },
-  { id: "els", title: "ELS", hint: "Emergency lighting configs.", match: ["els"] },
-  { id: "other", title: "Other", hint: "Gameconfig, LML, OpenIV, or unrecognized packs.", match: ["gameconfig", "lml", "oiv"] },
-];
+const SMART_SECTIONS = MOD_SECTIONS;
+const TYPE_SECTIONS = MOD_SECTIONS;
 
 function kindBadges(labels) {
   if (!labels?.length) return "";
@@ -149,9 +145,10 @@ function labelsFor(mod) {
 
 function primaryKind(mod) {
   const kinds = mod.kinds || [];
-  if (kinds.includes("lspdfr") || kinds.includes("rage")) return "lspdfr";
-  for (const section of TYPE_SECTIONS) {
-    if (section.id === "lspdfr" || section.id === "other") continue;
+  if (kinds.includes("lspdfr")) return "lspdfr";
+  if (kinds.includes("rage")) return "rage";
+  for (const section of MOD_SECTIONS) {
+    if (section.id === "other") continue;
     if (section.match.some((kind) => kinds.includes(kind))) return section.id;
   }
   return "other";
@@ -190,40 +187,177 @@ function typeLabel(mod) {
   return section ? section.title : "Other";
 }
 
-function renderModCard(mod) {
-  const folder = folderHint(mod);
-  const lamp = mod.lamp === "ok" ? "ok" : "bad";
-  const lampLabel = mod.lampLabel || (lamp === "ok" ? "Working" : "Not working");
-  const meta = [lampLabel, folder].filter(Boolean).join(" · ");
+function folderLamp(mod) {
+  if (mod.lamp === "ok" || mod.lamp === "warn" || mod.lamp === "grey" || mod.lamp === "bad") return mod.lamp;
+  return mod.enabled === false ? "grey" : "bad";
+}
+
+function normalizeDest(file) {
+  return String(typeof file === "string" ? file : (file && (file.destination || file.dest)) || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .toLowerCase();
+}
+
+function destSet(mod) {
+  return new Set((mod.files || []).map(normalizeDest).filter(Boolean));
+}
+
+function notableDests(mod) {
+  return [...destSet(mod)].filter((dest) => /\.(dll|asi)$/i.test(dest));
+}
+
+function folderCoveredBySmart(folder, smartList) {
+  const notables = notableDests(folder);
+  const files = [...destSet(folder)];
+  return (smartList || []).some((smart) => {
+    const owned = destSet(smart);
+    if (notables.length) {
+      const hits = notables.filter((dest) => owned.has(dest)).length;
+      return hits === notables.length || hits / notables.length >= 0.8;
+    }
+    if (!files.length) return false;
+    const hits = files.filter((dest) => owned.has(dest)).length;
+    return hits >= Math.max(1, Math.ceil(files.length * 0.8));
+  });
+}
+
+function smartRowStatus(mod) {
+  const health = modHealthById.get(mod.id);
+  if (health) return health.status;
+  return mod.enabled === false ? "DISABLED" : "UNKNOWN";
+}
+
+function smartLamp(status) {
+  if (status === "BROKEN") return { lamp: "bad", label: "Broken" };
+  if (status === "WARNING" || status === "UNKNOWN") return { lamp: "warn", label: "Needs attention" };
+  if (status === "DISABLED") return { lamp: "grey", label: "Disabled" };
+  return { lamp: "ok", label: "Healthy" };
+}
+
+function unifiedRows() {
+  const folderMods = (state && state.mods) || [];
+  const covered = new Set();
+  const rows = (smartMods || []).map((mod) => {
+    const status = smartRowStatus(mod);
+    const lamp = smartLamp(status);
+    const health = modHealthById.get(mod.id);
+    const reasons = (health && health.reasons) || [];
+    const compat = compatibilityLabel(mod.compatibilityStatus || mod.compatibility);
+    return {
+      origin: "smart",
+      id: mod.id,
+      name: mod.name,
+      enabled: mod.enabled !== false,
+      section: primarySmartKind(mod),
+      lamp: lamp.lamp,
+      lampLabel: lamp.label,
+      lampDetail: reasons[0] || lamp.label,
+      status,
+      meta: [lamp.label, compat !== "Unknown" ? compat : "", reasons[0]].filter(Boolean).join(" · "),
+      raw: mod,
+    };
+  });
+  for (const mod of folderMods) {
+    if (folderCoveredBySmart(mod, smartMods)) {
+      covered.add(mod.id);
+      continue;
+    }
+    const lamp = folderLamp(mod);
+    const lampLabel = mod.lampLabel || (lamp === "ok" ? "Healthy" : lamp === "warn" ? "Needs attention" : lamp === "grey" ? "Disabled" : "Broken");
+    const status = mod.healthStatus || (mod.enabled === false ? "DISABLED" : lamp === "ok" ? "HEALTHY" : lamp === "warn" ? "WARNING" : "BROKEN");
+    const folder = folderHint(mod);
+    rows.push({
+      origin: mod.discovery === "DISK" ? "disk" : "folder",
+      id: mod.id,
+      name: displayName(mod),
+      enabled: mod.enabled !== false,
+      section: primaryKind(mod),
+      lamp,
+      lampLabel,
+      lampDetail: mod.lampDetail || lampLabel,
+      status,
+      meta: [lampLabel, mod.discovery === "DISK" ? "Found in Duty folder" : folder, mod.lampDetail]
+        .filter(Boolean)
+        .join(" · "),
+      raw: mod,
+    });
+  }
+  return { rows, hiddenFolder: covered.size };
+}
+
+function currentModFilter() {
+  const query = ($("mod-search") && $("mod-search").value) || "";
+  const status = ($("mod-filter") && $("mod-filter").value) || "";
+  return { query: query.trim().toLowerCase(), status };
+}
+
+function visibleUnifiedRows() {
+  const { query, status } = currentModFilter();
+  const { rows } = unifiedRows();
+  return rows.filter((row) => {
+    if (status === "ENABLED" && !row.enabled) return false;
+    if (status === "DISABLED" && row.enabled) return false;
+    if (status && status !== "ENABLED" && status !== "DISABLED" && row.status !== status) return false;
+    if (!query) return true;
+    const files = (row.raw.files || []).map((file) => (typeof file === "string" ? file : file.destination || "")).join(" ");
+    const hay = [row.name, row.raw.canonicalModId, row.raw.category, files].join(" ").toLowerCase();
+    return hay.includes(query);
+  });
+}
+
+function canRepairRow(row) {
+  if (row.origin !== "smart") return false;
+  const health = modHealthById.get(row.id);
+  const issues = (health && health.issues) || [];
+  if (issues.some((issue) => issue.code === "MISSING_MANAGED_FILE" || issue.code === "STORE_MISSING")) return true;
+  return Boolean(health && health.status === "BROKEN" && /missing/i.test((health.reasons || []).join(" ")));
+}
+
+function renderModCard(row) {
+  const repair = canRepairRow(row) ? `<button class="ghost" data-act="repair" type="button">Repair</button>` : "";
+  const manage =
+    row.origin === "disk"
+      ? ""
+      : `<button class="ghost" data-act="toggle" type="button">${row.enabled ? "Disable" : "Enable"}</button>
+        <button class="ghost" data-act="remove" type="button">Remove</button>`;
   return `
-    <article class="mod ${mod.enabled ? "" : "disabled"}" data-id="${escapeHtml(mod.id)}">
-      <i class="lamp ${lamp}" title="${escapeHtml(mod.lampDetail || lampLabel)}"></i>
+    <article class="mod ${row.enabled ? "" : "disabled"}" data-origin="${row.origin}" data-id="${escapeHtml(row.id)}">
+      <i class="lamp ${row.lamp}" title="${escapeHtml(row.lampDetail || row.lampLabel)}"></i>
       <div class="mod-main">
-        <h3>${escapeHtml(displayName(mod))}</h3>
-        <p>${escapeHtml(meta)}</p>
+        <h3>${escapeHtml(row.name)}</h3>
+        <p>${escapeHtml(row.meta)}</p>
       </div>
       <div class="mod-actions">
-        <button class="ghost" data-act="toggle" type="button">${mod.enabled ? "Disable" : "Enable"}</button>
-        <button class="ghost" data-act="remove" type="button">Remove</button>
+        <button class="ghost" data-act="details" type="button">Details</button>
+        ${repair}
+        ${manage}
       </div>
     </article>
   `;
 }
 
-function renderMods(mods) {
-  ui.modCount.textContent = String(mods.length);
-  if (!mods.length) {
-    ui.mods.innerHTML = `<p class="empty">Nothing installed yet.</p>`;
+function renderAllMods() {
+  if (!ui.mods) return;
+  const { rows } = unifiedRows();
+  const visible = visibleUnifiedRows();
+  if (ui.modCount) ui.modCount.textContent = String(rows.length);
+  if (ui.smartCount) ui.smartCount.textContent = String(rows.length);
+  if (!rows.length) {
+    ui.mods.innerHTML = `<p class="empty">Nothing installed yet. Drop a pack or plugin above.</p>`;
     return;
   }
-  const groups = new Map(TYPE_SECTIONS.map((section) => [section.id, []]));
-  for (const mod of mods) {
-    const key = primaryKind(mod);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(mod);
+  if (!visible.length) {
+    ui.mods.innerHTML = `<p class="empty">No mods match that search.</p>`;
+    return;
   }
-  const byName = (a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" });
-  ui.mods.innerHTML = TYPE_SECTIONS.map((section) => {
+  const groups = new Map(MOD_SECTIONS.map((section) => [section.id, []]));
+  for (const row of visible) {
+    const key = groups.has(row.section) ? row.section : "other";
+    groups.get(key).push(row);
+  }
+  const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+  ui.mods.innerHTML = MOD_SECTIONS.map((section) => {
     const items = (groups.get(section.id) || []).sort(byName);
     if (!items.length) return "";
     return `
@@ -236,6 +370,46 @@ function renderMods(mods) {
       </section>
     `;
   }).join("");
+}
+
+function renderMods() {
+  renderAllMods();
+}
+
+function conditionLine(analysis) {
+  const todos = (analysis && analysis.todos) || (analysis && analysis.summary || []).filter((row) => row.nextStep && row.nextStep.needed);
+  if (!analysis) return "Analyze mods lists only what you need to do.";
+  if (todos.length) return todos.length === 1 ? "1 thing to do." : `${todos.length} things to do.`;
+  const advice = (analysis.advice || []).filter((line) => line && line !== "Nothing you need to do.");
+  if (advice.length) return advice.length === 1 ? "1 thing to do." : `${advice.length} things to do.`;
+  const broken = Number((analysis.counts && analysis.counts.BROKEN) || 0);
+  if (broken) return broken === 1 ? "1 thing to do." : `${broken} things to do.`;
+  return "Nothing you need to do.";
+}
+
+function renderModCondition(analysis) {
+  const line = $("mods-condition-line");
+  if (line) line.textContent = conditionLine(analysis);
+}
+
+function showFolderModDetails(mod) {
+  const reasons = mod.healthReasons || (mod.lampDetail ? [mod.lampDetail] : []);
+  const foundOnDisk = mod.discovery === "DISK";
+  showOverlay(`
+    <p class="eyebrow">MOD</p>
+    <h2>${escapeHtml(displayName(mod))}</h2>
+    <p>${escapeHtml(mod.lampLabel || "Unknown")} — ${escapeHtml(mod.healthStatus || "")}</p>
+    <ul>${reasons.map((row) => `<li>${escapeHtml(row)}</li>`).join("") || "<li>No extra notes.</li>"}</ul>
+    ${mdtBlock(mod.mdt)}
+    ${mod.keybinds ? `<h3>Keybinds</h3>${keybindBlock(mod.keybinds)}` : ""}
+    <p class="muted">${
+      foundOnDisk
+        ? "Found in the Duty folder. It was not installed through Smart Install, so Enable / Remove stay off until you drop the official zip."
+        : "This lamp is from local files and Duty logs. It is not a guarantee the next launch will work."
+    }</p>
+    <div class="dialog-actions"><button id="fd-close" class="ghost" type="button">Close</button></div>
+  `);
+  $("fd-close").onclick = hideOverlay;
 }
 
 function escapeHtml(value) {
@@ -275,6 +449,7 @@ function renderState(next) {
   }
 
   renderMods(mods || []);
+  renderModCondition(next.modAnalysis);
   renderLastSession(next.lastSession);
   renderRetestBanner(next.pendingRetest || (next.lastSession && next.lastSession.pendingRetest));
   renderActiveProfile(next.profile);
@@ -318,6 +493,36 @@ function formatWhen(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString([], { hour: "numeric", minute: "2-digit", month: "short", day: "numeric" });
+}
+
+function mdtRenderLamp(value) {
+  const key = String(value || "").toUpperCase();
+  if (key === "WORKING" || key === "DETECTED" || key === "INITIALIZED") return "ok";
+  if (key === "FAILED") return "bad";
+  return "warn";
+}
+
+function mdtBlock(info) {
+  const data = info || null;
+  if (!data || !data.plugin) return "";
+  return `
+    <h3>Callout Interface</h3>
+    <p>Callout Interface: <i class="lamp ${data.plugin === "WORKING" ? "ok" : data.plugin === "FAILED" ? "bad" : "warn"}"></i> ${escapeHtml(data.plugin)}</p>
+    <ul class="mdt-report">
+      <li>MDT configuration: ${escapeHtml(data.mdt)}</li>
+      <li>MDT input: <i class="lamp ${mdtRenderLamp(data.mdtInput)}"></i> ${escapeHtml(data.mdtInput || "UNVERIFIED")}</li>
+      <li>MDT canvas: <i class="lamp ${mdtRenderLamp(data.mdtCanvas)}"></i> ${escapeHtml(data.mdtCanvas || "UNVERIFIED")}</li>
+      <li>MDT rendering: <i class="lamp ${mdtRenderLamp(data.mdtRendering)}"></i> ${escapeHtml(data.mdtRendering || "UNVERIFIED")}</li>
+      <li>Renderer: ${escapeHtml(data.renderer || "RawCanvasUI")}</li>
+      <li>Graphics API: ${escapeHtml(data.graphicsApi || "UNKNOWN")}</li>
+      <li>Last render error: ${escapeHtml(data.lastRenderError || "NONE")}</li>
+      <li>Suggested fix: ${escapeHtml(data.suggestedFix || "NONE")}</li>
+      <li>Toggle key: ${escapeHtml(data.toggleKey)}</li>
+      <li>Vehicle only: ${escapeHtml(data.vehicleOnly)}</li>
+      <li>Key conflict: ${escapeHtml(data.keyConflict)}</li>
+    </ul>
+    ${data.pressHint ? `<p class="muted">${escapeHtml(data.pressHint)}</p>` : ""}
+  `;
 }
 
 function keybindBlock(info) {
@@ -374,24 +579,17 @@ function userError(error) {
   return `What happened\n${raw}\n\nWhy it matters\nThe last action did not finish.\n\nWhat you can do\nTry again, or use Recovery / Restore Known-Good Setup.`;
 }
 
-function showModsPanel(which) {
-  const smartOn = which === "smart";
-  const folder = $("mods-panel-folder");
-  const smart = $("mods-panel-smart");
-  if (folder) folder.classList.toggle("hidden", smartOn);
-  if (smart) smart.classList.toggle("hidden", !smartOn);
-  document.querySelectorAll(".mods-switch [data-mods-panel]").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.modsPanel === which);
-  });
-}
-
 function showPage(page) {
   currentPage = page;
   const dash = $("page-dashboard");
   const mods = $("page-mods");
+  const browse = $("page-browse");
   if (dash) dash.classList.toggle("hidden", page !== "dashboard");
   if (mods) mods.classList.toggle("hidden", page !== "mods");
+  if (browse) browse.classList.toggle("hidden", page !== "browse");
   if (page === "dashboard") refreshDashboard();
+  if (page === "mods") refreshSmart().catch((error) => addLog({ level: "error", message: userError(error) }));
+  if (page === "browse") refreshWorkshop().catch((error) => addLog({ level: "error", message: userError(error) }));
   document.querySelectorAll(".nav-btn").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.page === page);
   });
@@ -618,6 +816,7 @@ async function refreshScreen() {
     await refresh();
     await refreshSmart();
     await refreshDashboard();
+    if (currentPage === "browse") await refreshWorkshop();
     addLog({ level: "ok", message: "Manager refreshed." });
   } catch (error) {
     addLog({ level: "error", message: userError(error) });
@@ -820,51 +1019,6 @@ function compatibilityLabel(status) {
   }
 }
 
-function renderSmartCard(mod) {
-  const compat = compatibilityLabel(mod.compatibilityStatus || mod.compatibility);
-  const health = modHealthById.get(mod.id);
-  const status = health ? health.status : mod.enabled === false ? "DISABLED" : (mod.cardHealth || "UNKNOWN").toUpperCase();
-  const reasons = (health && health.reasons) || [];
-  const lamp = status === "BROKEN" ? "bad" : status === "WARNING" || status === "UNKNOWN" ? "warn" : status === "DISABLED" ? "grey" : "ok";
-  const statusLabel = status === "DISABLED" ? "Disabled" : status;
-  const meta = [mod.type || "Mod", statusLabel, compat !== "Unknown" ? compat : "", reasons[0]].filter(Boolean).join(" · ");
-  return `
-    <article class="mod ${mod.enabled ? "" : "disabled"}" data-smart-id="${escapeHtml(mod.id)}">
-      <i class="lamp ${lamp}"></i>
-      <div class="mod-main">
-        <h3>${escapeHtml(mod.name)}</h3>
-        <p>${escapeHtml(meta)}</p>
-      </div>
-      <div class="mod-actions">
-        <button data-sact="details" type="button">Details</button>
-        <button class="ghost" data-sact="repair" type="button">Repair</button>
-        <button class="ghost" data-sact="toggle" type="button">${mod.enabled ? "Disable" : "Enable"}</button>
-        <button class="ghost" data-sact="remove" type="button">Remove</button>
-      </div>
-    </article>
-  `;
-}
-
-function currentModFilter() {
-  const query = ($("mod-search") && $("mod-search").value) || "";
-  const status = ($("mod-filter") && $("mod-filter").value) || "";
-  return { query: query.trim().toLowerCase(), status };
-}
-
-function visibleSmartMods() {
-  const { query, status } = currentModFilter();
-  return smartMods.filter((mod) => {
-    const health = modHealthById.get(mod.id);
-    const rowStatus = health ? health.status : mod.enabled === false ? "DISABLED" : "UNKNOWN";
-    if (status === "ENABLED" && mod.enabled === false) return false;
-    if (status === "DISABLED" && mod.enabled !== false) return false;
-    if (status && status !== "ENABLED" && status !== "DISABLED" && rowStatus !== status) return false;
-    if (!query) return true;
-    const hay = [mod.name, mod.canonicalModId, mod.category, ...(mod.files || []).map((f) => f.destination)].join(" ").toLowerCase();
-    return hay.includes(query);
-  });
-}
-
 function primarySmartKind(mod) {
   const hay = [
     mod.type,
@@ -891,33 +1045,7 @@ function primarySmartKind(mod) {
 }
 
 function renderSmartMods() {
-  if (!ui.smartMods) return;
-  const rows = visibleSmartMods();
-  if (ui.smartCount) ui.smartCount.textContent = String(smartMods.length);
-  if (!rows.length) {
-    ui.smartMods.innerHTML = `<p class="empty">${smartMods.length ? "No mods match that search." : "No Smart Install mods yet. Tick Preview first, then drop a plugin."}</p>`;
-    return;
-  }
-  const groups = new Map(SMART_SECTIONS.map((section) => [section.id, []]));
-  for (const mod of rows) {
-    const key = primarySmartKind(mod);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(mod);
-  }
-  const byName = (a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
-  ui.smartMods.innerHTML = SMART_SECTIONS.map((section) => {
-    const items = (groups.get(section.id) || []).sort(byName);
-    if (!items.length) return "";
-    return `
-      <section class="mod-type" data-type="${section.id}">
-        <header class="mod-type-head">
-          <h3>${escapeHtml(section.title)}</h3>
-          <span class="count">${items.length}</span>
-        </header>
-        <div class="mod-type-list">${items.map(renderSmartCard).join("")}</div>
-      </section>
-    `;
-  }).join("");
+  renderAllMods();
 }
 
 async function refreshSmart() {
@@ -928,7 +1056,7 @@ async function refreshSmart() {
   } catch {
     smartMods = [];
   }
-  renderSmartMods();
+  renderAllMods();
 }
 
 function severityMeta(sev) {
@@ -1341,6 +1469,14 @@ async function smartIngest(sources) {
     try {
       addLog({ level: "info", message: `Analyzing ${name} (Smart Install)…` });
       preview = await window.tactix.smartAnalyze(source);
+      if (workshopHandoff) {
+        const allowed = await applyWorkshopHandoff(preview);
+        if (!allowed) {
+          await window.tactix.smartCancel(preview.id).catch(() => {});
+          addLog({ level: "warn", message: `Skipped ${name} because it did not match the selected Browse Mods item.` });
+          continue;
+        }
+      }
     } catch (error) {
       addLog({ level: "error", message: error.message });
       continue;
@@ -1541,6 +1677,9 @@ function showTests(tests, options = {}) {
     addLog({ level: "error", message: "Create the LSPDFR folder before running tests." });
     return;
   }
+  const warningItems = (tests.dutyWarnings || [])
+    .map((row) => `<li><strong>${escapeHtml(row.status)}</strong> — ${escapeHtml(row.title)}${row.detail ? ` <small>${escapeHtml(row.detail)}</small>` : ""}</li>`)
+    .join("");
   const items = tests.checks
     .map((item) => {
       return `<li>
@@ -1558,6 +1697,7 @@ function showTests(tests, options = {}) {
   showOverlay(`
     <h2>${options.installed ? "Installed" : "Function test"}</h2>
     <p>${escapeHtml(options.installed ? `LSPDFR is in the duty folder. ${tests.summary}` : tests.summary)}</p>
+    ${warningItems ? `<h3>Current Duty Warnings</h3><ul class="check-list">${warningItems}</ul>` : ""}
     <ul class="check-list">${items}</ul>
     <div class="dialog-actions">
       ${canPlay ? `<button id="tests-play" class="primary" type="button">Play LSPDFR</button>` : ""}
@@ -2336,36 +2476,20 @@ ui.mods.addEventListener("click", async (event) => {
   const card = event.target.closest(".mod");
   if (!button || !card) return;
   const id = card.dataset.id;
-  const mod = state.mods.find((item) => item.id === id);
+  const origin = card.dataset.origin || "folder";
   try {
     setBusy(true);
-    if (button.dataset.act === "remove") {
-      renderState(await window.tactix.uninstall(id));
-    } else if (mod) {
-      renderState(await window.tactix.setEnabled(id, !mod.enabled));
-    }
-  } catch (error) {
-    addLog({ level: "error", message: error.message });
-  } finally {
-    setBusy(false);
-  }
-});
-
-if (ui.smartMods) {
-  ui.smartMods.addEventListener("click", async (event) => {
-    const button = event.target.closest("button[data-sact]");
-    const card = event.target.closest("[data-smart-id]");
-    if (!button || !card) return;
-    const id = card.dataset.smartId;
-    const mod = smartMods.find((item) => item.id === id);
-    try {
-      setBusy(true);
-      if (button.dataset.sact === "details") {
+    if (origin === "smart") {
+      const mod = smartMods.find((item) => item.id === id);
+      if (button.dataset.act === "details") {
         await showModDetails(id);
-      } else if (button.dataset.sact === "repair") {
+      } else if (button.dataset.act === "repair") {
         const result = await window.tactix.smartRepair(id);
+        const restored = (result.result && result.result.restored) || [];
+        if (restored.length) addLog({ level: "ok", message: `Restored ${restored.length} file(s) for ${mod && mod.name ? mod.name : "this mod"}.` });
+        else addLog({ level: "info", message: "Repair found no missing files. The lamp is about condition, not a broken copy." });
         renderState(result.state);
-      } else if (button.dataset.sact === "remove") {
+      } else if (button.dataset.act === "remove") {
         const impact = await window.tactix.depsImpact(id);
         if (impact.requiredDependents && impact.requiredDependents.length) {
           const ok = window.confirm(`DEPENDENCY IMPACT\n\nRemoving this mod may affect:\n${impact.requiredDependents.map((row) => `• ${row.name}`).join("\n")}\n\nContinue?`);
@@ -2378,7 +2502,7 @@ if (ui.smartMods) {
           result = await window.tactix.smartUninstall(id, true);
         }
         renderState(result.state);
-      } else if (mod && button.dataset.sact === "toggle") {
+      } else if (mod && button.dataset.act === "toggle") {
         if (mod.enabled) {
           const impact = await window.tactix.depsImpact(id);
           if (impact.requiredDependents && impact.requiredDependents.length) {
@@ -2390,13 +2514,28 @@ if (ui.smartMods) {
         renderState(result.state);
       }
       await refreshSmart();
-    } catch (error) {
-      addLog({ level: "error", message: error.message });
-    } finally {
-      setBusy(false);
+      return;
     }
-  });
-}
+    if (origin === "disk") {
+      const diskMod = (state.mods || []).find((item) => item.id === id);
+      if (button.dataset.act === "details" && diskMod) showFolderModDetails(diskMod);
+      return;
+    }
+    const mod = (state.mods || []).find((item) => item.id === id);
+    if (button.dataset.act === "details" && mod) {
+      showFolderModDetails(mod);
+    } else if (button.dataset.act === "remove") {
+      renderState(await window.tactix.uninstall(id));
+    } else if (mod && button.dataset.act === "toggle") {
+      renderState(await window.tactix.setEnabled(id, !mod.enabled));
+    }
+    await refreshSmart();
+  } catch (error) {
+    addLog({ level: "error", message: error.message });
+  } finally {
+    setBusy(false);
+  }
+});
 
 async function showModDetails(installId) {
   const details = await window.tactix.modDetails(installId);
@@ -2415,16 +2554,26 @@ async function showModDetails(installId) {
     <p>${escapeHtml(health.status)}</p>
     ${
       health.runtime
-        ? `<p>Local Duty check: ${escapeHtml(health.runtime.status)}${health.runtime.evidence ? ` — ${escapeHtml(health.runtime.evidence)}` : ""}</p>`
-        : ""
+        ? `<p>Runtime: ${escapeHtml(health.runtime.status)}${health.runtime.ruleTier ? ` · ${escapeHtml(health.runtime.ruleTier)}` : ""}${
+            health.runtime.confidence ? ` · ${escapeHtml(health.runtime.confidence)}` : ""
+          }${health.runtime.evidence ? ` — ${escapeHtml(health.runtime.evidence)}` : ""}</p>`
+        : `<p>Runtime: unverified — waiting for a Duty load signal.</p>`
     }
     <ul>${(health.reasons || []).map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul>
+    ${
+      (details.runtimeHistory || []).length
+        ? `<h3>Runtime by version</h3><ul>${details.runtimeHistory
+            .map((row) => `<li>${escapeHtml(row.version)} — ${row.worked} working · ${row.failed} failed</li>`)
+            .join("")}</ul>`
+        : ""
+    }
     <p>Installed: ${escapeHtml((details.mod && details.mod.version) || "UNKNOWN")}<br />Known-good: ${escapeHtml(knowledge.knownGoodVersion || "none")}${knowledge.hasUserOverride ? "<br /><em>Some fields are your local notes, not verified global truth.</em>" : ""}</p>
     <h3>Version history</h3>
     <ul>${history.map((row) => `<li>${escapeHtml(row.version)}${row.current ? " — current" : ""}${row.knownGood ? " — known good" : ""}${row.hasPayload ? "" : " (no payload)"}</li>`).join("") || "<li>No stored versions.</li>"}</ul>
     <h3>Dependencies</h3>
     <p>${tree || "None recorded."}</p>
     ${dependents.length ? `<p>${escapeHtml((details.mod && details.mod.name) || "This mod")} is required by:<br />${dependents.map((row) => `• ${escapeHtml(row.name)}`).join("<br />")}</p>` : ""}
+    ${mdtBlock(details.mdt || (health && health.mdt))}
     <h3>Keybinds</h3>
     ${keybindBlock(details.keybinds)}
     <h3>Managed configs</h3>
@@ -2433,14 +2582,23 @@ async function showModDetails(installId) {
       <button data-cdef="${escapeHtml(row.destination)}" class="ghost" type="button">Restore default</button></li>`).join("") || "<li>None.</li>"}</ul>
     <div class="row-actions">
       <button id="md-edit" type="button">Edit local metadata</button>
+      <button id="md-runtime" class="ghost" type="button">Set runtime verification rule</button>
       <button id="md-kg" class="ghost" type="button">Mark current version as Known Good</button>
       <button id="md-restore" class="ghost" type="button" ${plan.available ? "" : "disabled"}>Restore Known-Good Version</button>
     </div>
-    ${developerMode() ? `<h3>Developer</h3><p class="muted">installId ${escapeHtml(installId)}<br />canonical ${escapeHtml((details.mod && details.mod.canonicalModId) || "none")}<br />manifest ${escapeHtml((details.manifest && details.manifest.id) || "")}</p>` : ""}
+    ${developerMode() ? `<h3>Developer</h3><p class="muted">installId ${escapeHtml(installId)}<br />canonical ${escapeHtml((details.mod && details.mod.canonicalModId) || "none")}<br />manifest ${escapeHtml((details.manifest && details.manifest.id) || "")}</p>${
+      (details.runtimeSuggestions || []).length
+        ? `<p>Possible runtime verification signal found:</p><ul>${details.runtimeSuggestions
+            .slice(0, 4)
+            .map((line) => `<li><code>${escapeHtml(line)}</code></li>`)
+            .join("")}</ul><p class="muted">Use Set runtime verification rule to confirm. Nothing is saved automatically.</p>`
+        : ""
+    }` : ""}
     <div class="dialog-actions"><button id="md-close" class="ghost" type="button">Close</button></div>
   `, true);
   $("md-close").onclick = hideOverlay;
   $("md-edit").onclick = () => showKnowledgeEditor(details);
+  if ($("md-runtime")) $("md-runtime").onclick = () => showRuntimeRuleEditor(details);
   $("md-kg").onclick = async () => {
     await window.tactix.knowledgeMarkKnownGood({ installId, version: details.mod && details.mod.version });
     showModDetails(installId);
@@ -2468,6 +2626,65 @@ async function showModDetails(installId) {
       if (!window.confirm(`Restore the installed default for ${button.dataset.cdef}?`)) return;
       await window.tactix.configRestoreDefault({ installId, destination: button.dataset.cdef });
       showModDetails(installId);
+    };
+  });
+}
+
+function showRuntimeRuleEditor(details) {
+  const rule = details.runtimeRule;
+  const current = (rule && rule.positiveSignals && rule.positiveSignals[0] && rule.positiveSignals[0].contains) || "";
+  const suggestions = details.runtimeSuggestions || [];
+  showOverlay(`
+    <p class="eyebrow">RUNTIME RULE</p>
+    <h2>Set runtime verification rule</h2>
+    <p class="muted">When this text appears in a Duty RPH or LSPDFR log, mark this mod as working. Contains or exact match only. No scripts. Saved on this PC, not in built-in knowledge.</p>
+    ${current ? `<p>Current rule: <code>${escapeHtml(current)}</code></p>` : "<p>No local rule yet.</p>"}
+    <p><label>Log line<br /><textarea id="rt-line" rows="3">${escapeHtml(current)}</textarea></label></p>
+    <p><label><input id="rt-exact" type="checkbox" /> Match the whole line exactly</label></p>
+    ${
+      suggestions.length
+        ? `<h3>Possible signals from the last session</h3><p class="muted">Confirmation required. Nothing is saved until you choose one.</p><ul>${suggestions
+            .map((line, index) => `<li><code>${escapeHtml(line)}</code><br /><button type="button" class="ghost" data-rsig="${index}">Use this as a local verification rule?</button></li>`)
+            .join("")}</ul>`
+        : ""
+    }
+    <div class="dialog-actions">
+      <button id="rt-save" type="button">Save rule</button>
+      <button id="rt-clear" class="ghost" type="button" ${current ? "" : "disabled"}>Clear rule</button>
+      <button id="rt-cancel" class="ghost" type="button">Cancel</button>
+    </div>
+  `, true);
+  const applyContains = async (contains, match) => {
+    const result = await window.tactix.runtimeSetRule({
+      installId: details.installId,
+      canonicalModId: details.mod && details.mod.canonicalModId,
+      contains,
+      match,
+      source: "USER_OVERRIDE",
+    });
+    if (result && result.error) {
+      addLog({ level: "error", message: result.error });
+      return;
+    }
+    await refreshSmart();
+    showModDetails(details.installId);
+  };
+  $("rt-cancel").onclick = () => showModDetails(details.installId);
+  $("rt-save").onclick = () => applyContains($("rt-line").value, $("rt-exact").checked ? "exact" : "contains");
+  $("rt-clear").onclick = async () => {
+    await window.tactix.runtimeClearRule({
+      installId: details.installId,
+      canonicalModId: details.mod && details.mod.canonicalModId,
+    });
+    await refreshSmart();
+    showModDetails(details.installId);
+  };
+  ui.dialog.querySelectorAll("button[data-rsig]").forEach((button) => {
+    button.onclick = () => {
+      const line = suggestions[Number(button.dataset.rsig)];
+      if (!line) return;
+      if (!window.confirm(`Use this as a local verification rule?\n\n${line}`)) return;
+      applyContains(line, "contains");
     };
   });
 }
@@ -2549,6 +2766,11 @@ async function showDiagnostics() {
     <h2>Check Mod Manager</h2>
     <p>Mod Manager Health: <strong>${escapeHtml(check.appHealth)}</strong></p>
     <ul>${(check.checks || []).map((row) => `<li>${row.ok ? "✓" : "•"} ${escapeHtml(row.detail)}</li>`).join("")}</ul>
+    ${(check.dutyWarnings || []).length
+      ? `<h3>Current Duty Warnings</h3><ul>${check.dutyWarnings
+          .map((row) => `<li><strong>${escapeHtml(row.status)}</strong> — ${escapeHtml(row.title)}</li>`)
+          .join("")}</ul>`
+      : ""}
     <h3>Storage & Recovery</h3>
     <p>Payloads ${mb(usage.payloads)} · Backups ${mb(usage.backups)} · Snapshots ${mb(usage.snapshots)} · Sessions ${mb(usage.sessions)}</p>
     <div class="row-actions">
@@ -2636,6 +2858,264 @@ async function showLogViewer() {
   $("log-close").onclick = hideOverlay;
 }
 
+const WORKSHOP_CHIPS = [
+  { id: "", label: "All" },
+  { id: "FEATURED", label: "Featured" },
+  { id: "ESSENTIAL", label: "Essential" },
+  { id: "PLUGINS", label: "Plugins" },
+  { id: "CALLOUTS", label: "Callouts" },
+  { id: "DISPATCH", label: "Dispatch" },
+  { id: "MDT", label: "MDT" },
+  { id: "BACKUP", label: "Backup" },
+  { id: "IMMERSION", label: "Immersion" },
+  { id: "FRAMEWORKS", label: "Frameworks" },
+  { id: "VEHICLES", label: "Vehicles" },
+  { id: "EUP", label: "EUP" },
+  { id: "ENHANCED", label: "Enhanced" },
+  { id: "INSTALLED", label: "Installed" },
+  { id: "UPDATES", label: "Updates" },
+  { id: "FAVORITES", label: "Favorites" },
+];
+
+function workshopQuery() {
+  const chip = document.querySelector(".workshop-chip.is-active");
+  return {
+    query: ($("workshop-search") && $("workshop-search").value) || "",
+    filter: ($("workshop-filter") && $("workshop-filter").value) || (chip && chip.dataset.filter) || "",
+  };
+}
+
+function depMark(dep) {
+  return dep.installed ? "✓" : "✕";
+}
+
+function renderWorkshopCard(mod) {
+  const installed = mod.installedState || {};
+  const deps = (mod.dependencies || []).slice(0, 4);
+  const update = installed.updateAvailable
+    ? `<p>Installed ${escapeHtml(installed.installedVersion || "?")} · Available ${escapeHtml(installed.sourceVersion || "?")}${installed.updateRisk ? ` · Risk ${escapeHtml(installed.updateRisk.level)}` : ""}</p>`
+    : "";
+  return `
+    <article class="mod workshop-card" data-workshop-id="${escapeHtml(mod.workshopId)}">
+      <i class="lamp ${installed.installed ? "ok" : "grey"}"></i>
+      <div class="mod-main">
+        <h3>${escapeHtml(mod.name)}</h3>
+        <p>${escapeHtml(mod.categoryLabel)} · ${escapeHtml(mod.sourceBadge)} · Enhanced ${escapeHtml(mod.enhancedLabel)}</p>
+        <p>${deps.length ? `Dependencies: ${deps.map((d) => `${depMark(d)} ${escapeHtml(d.name)}`).join(" · ")}` : "Dependencies: none recorded"}</p>
+        <p>Installed: ${installed.installed ? escapeHtml(installed.installedVersion || "Yes") : "No"}${mod.favorite ? " · Favorite" : ""}</p>
+        ${update}
+        ${mod.archiveInstallUnsupported ? `<p class="muted">Vehicle/EUP archive · automatic install not supported for encrypted Enhanced archives</p>` : ""}
+      </div>
+      <div class="mod-actions">
+        <button data-wact="details" type="button">Details</button>
+        <button class="ghost" data-wact="get" type="button">${installed.updateAvailable ? "Get update" : "Get mod"}</button>
+        <button class="ghost" data-wact="fav" type="button">${mod.favorite ? "Unfavorite" : "Favorite"}</button>
+      </div>
+    </article>
+  `;
+}
+
+async function applyWorkshopHandoff(preview) {
+  if (!workshopHandoff) return true;
+  const check = await window.tactix.workshopEvaluateHandoff({ expected: workshopHandoff, preview });
+  if (check && check.mismatch) {
+    return window.confirm(`${check.message}\n\nAnalyze this file with Smart Install anyway?`);
+  }
+  if (check && check.weak && check.message) {
+    return window.confirm(`${check.message}\n\nContinue to Smart Install preview?`);
+  }
+  return true;
+}
+
+async function importWorkshopFiles(paths, handoff = workshopHandoff) {
+  if (handoff) workshopHandoff = handoff;
+  await smartIngest(paths);
+}
+
+async function showWorkshopDetails(workshopId) {
+  const mod = await window.tactix.workshopDetails(workshopId);
+  if (!mod) return;
+  const installed = mod.installedState || {};
+  const deps = (mod.dependencies || [])
+    .map((dep) => `<li><button class="ghost" data-wdep="${escapeHtml(dep.workshopId)}" type="button">${dep.installed ? "✓" : "✕"} ${escapeHtml(dep.name)}</button></li>`)
+    .join("");
+  const used = (mod.usedBy || []).map((row) => `<li>${escapeHtml(row.name)}</li>`).join("");
+  const order = (mod.installOrder || []).map((row) => `<li>${row.step}. ${escapeHtml(row.name)}</li>`).join("");
+  const collections = (await window.tactix.workshopLibrary()).collections || [];
+  showOverlay(`
+    <p class="eyebrow">BROWSE MODS</p>
+    <h2>${escapeHtml(mod.name)}</h2>
+    <p>${escapeHtml(mod.sourceBadge)} · ${escapeHtml(mod.categoryLabel)}${mod.author ? ` · ${escapeHtml(mod.author)}` : ""}</p>
+    <p>${escapeHtml(mod.description || "")}</p>
+    <p>Version: ${escapeHtml(mod.version || "See official page")}<br />Installed: ${installed.installed ? escapeHtml(installed.installedVersion || "Yes") : "No"}${installed.knownGoodVersion ? `<br />Known-good: ${escapeHtml(installed.knownGoodVersion)}` : ""}</p>
+    <p>Enhanced compatibility: ${escapeHtml(mod.enhancedLabel)} <span class="muted">(local manager data, not the source page)</span></p>
+    ${mod.archiveInstallUnsupported ? `<p><strong>Vehicle / archive mod</strong><br />Automatic installation is not supported for encrypted GTA V Enhanced archives.</p>` : ""}
+    <h3>Dependencies</h3>
+    <ul>${deps || "<li>None recorded locally.</li>"}</ul>
+    ${order ? `<h3>Recommended install order</h3><ol>${order}</ol>` : ""}
+    ${used ? `<h3>Used by</h3><ul>${used}</ul>` : ""}
+    ${(mod.conflicts || []).length ? `<h3>Known conflicts</h3><ul>${mod.conflicts.map((row) => `<li>${escapeHtml(row.name)}${row.reason ? ` — ${escapeHtml(row.reason)}` : ""}</li>`).join("")}</ul>` : ""}
+    <p>Local crash history: ${mod.crash && mod.crash.failed ? `${mod.crash.failed} failed / ${mod.crash.clean} clean (correlation, not proof)` : "None"}</p>
+    <p>Health: ${escapeHtml((mod.health && mod.health.status) || "n/a")}</p>
+    <p class="muted">${escapeHtml(mod.licenseNote)}</p>
+    <p class="muted">A source page is not a safety rating. Smart Install still decides whether a downloaded file can be installed.</p>
+    <div class="field">
+      <label>Add to collection</label>
+      <select id="w-col">${["<option value=''>Choose…</option>"].concat(collections.map((col) => `<option value="${escapeHtml(col.id)}">${escapeHtml(col.name)}</option>`)).join("")}</select>
+    </div>
+    <div class="dialog-actions">
+      <button id="w-open" type="button">Open official page</button>
+      <button id="w-fav" class="ghost" type="button">${mod.favorite ? "Unfavorite" : "Favorite"}</button>
+      <button id="w-newcol" class="ghost" type="button">New collection</button>
+      <button id="w-close" class="ghost" type="button">Close</button>
+    </div>
+  `, true);
+  $("w-close").onclick = hideOverlay;
+  $("w-open").onclick = () => getWorkshopMod(mod.workshopId);
+  $("w-fav").onclick = async () => {
+    await window.tactix.workshopFavoriteToggle(mod.workshopId);
+    hideOverlay();
+    await refreshWorkshop();
+  };
+  $("w-newcol").onclick = async () => {
+    const name = window.prompt("Collection name");
+    if (!name) return;
+    const next = await window.tactix.workshopCollectionCreate(name);
+    const created = (next.collections || []).slice(-1)[0];
+    if (created) await window.tactix.workshopCollectionAdd({ collectionId: created.id, workshopId: mod.workshopId });
+    hideOverlay();
+    await refreshWorkshop();
+  };
+  $("w-col").onchange = async () => {
+    const id = $("w-col").value;
+    if (!id) return;
+    await window.tactix.workshopCollectionAdd({ collectionId: id, workshopId: mod.workshopId });
+    addLog({ level: "ok", message: `Added ${mod.name} to a collection.` });
+  };
+  ui.dialog.querySelectorAll("[data-wdep]").forEach((button) => {
+    button.onclick = () => showWorkshopDetails(button.dataset.wdep);
+  });
+}
+
+async function getWorkshopMod(workshopId) {
+  const result = await window.tactix.workshopGetMod(workshopId);
+  if (!result || !result.ok) {
+    addLog({ level: "error", message: "That catalog entry has no official page." });
+    return;
+  }
+  workshopHandoff = result.handoff;
+  addLog({
+    level: "info",
+    message: result.opened
+      ? `Opened the official page for ${result.handoff.expectedName}. Download the zip, then Import Download or use the inbox.`
+      : `Official page ready. Import the downloaded archive into Smart Install.`,
+  });
+}
+
+async function refreshWorkshopInbox() {
+  if (!$("workshop-inbox")) return;
+  const inbox = await window.tactix.workshopInbox();
+  const items = inbox.items || [];
+  $("workshop-inbox").innerHTML = items.length
+    ? items
+        .map(
+          (row) => `<article class="workshop-inbox-row" data-inbox-path="${escapeHtml(row.path)}">
+            <div><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.state)}</small></div>
+            <div class="mod-actions">
+              <button data-iact="analyze" type="button">Analyze</button>
+              <button class="ghost" data-iact="ignore" type="button">Ignore</button>
+            </div>
+          </article>`
+        )
+        .join("")
+    : `<p class="muted">No new downloads waiting.</p>`;
+  $("workshop-inbox").querySelectorAll("[data-iact]").forEach((button) => {
+    button.onclick = async () => {
+      const row = button.closest("[data-inbox-path]");
+      const filePath = row && row.dataset.inboxPath;
+      if (!filePath) return;
+      if (button.dataset.iact === "ignore") {
+        await window.tactix.workshopInboxIgnore(filePath);
+        await refreshWorkshopInbox();
+        return;
+      }
+      const ok = window.confirm("Analyze this archive with Smart Install? Nothing will be installed until you confirm the preview.");
+      if (!ok) return;
+      if (inbox.watch && inbox.watch.expected) workshopHandoff = inbox.watch.expected;
+      await importWorkshopFiles([filePath], workshopHandoff);
+      await refreshWorkshop();
+    };
+  });
+  const fresh = items.find((row) => row.state === "NEW" && inbox.watch && inbox.watch.expected);
+  if (fresh && fresh.path !== lastWorkshopInboxPrompt) {
+    lastWorkshopInboxPrompt = fresh.path;
+    const name = (inbox.watch.expected && inbox.watch.expected.expectedName) || "Selected mod";
+    const ok = window.confirm(`${name} download detected. Analyze with Smart Install?`);
+    if (ok) {
+      workshopHandoff = inbox.watch.expected;
+      await importWorkshopFiles([fresh.path], workshopHandoff);
+      await refreshWorkshop();
+    }
+  }
+}
+
+async function refreshWorkshop() {
+  if (!$("workshop-list")) return;
+  renderWorkshopChips();
+  const data = await window.tactix.workshopBrowse(workshopQuery());
+  const notice = [];
+  if (data.notice) notice.push(data.notice);
+  if (data.api && data.api.message) notice.push(data.api.message);
+  if (data.cache && data.cache.lastUpdated) notice.push(`Last updated ${new Date(data.cache.lastUpdated).toLocaleString()}`);
+  if ($("workshop-notice")) $("workshop-notice").textContent = notice.join(" · ");
+  const rec = data.recommendations || [];
+  if ($("workshop-recommend")) {
+    $("workshop-recommend").innerHTML = rec.length
+      ? `<p class="section-label">Recommended for my setup</p><ul>${rec
+          .map((row) => `<li><button class="ghost" data-wrec="${escapeHtml(row.workshopId)}" type="button">${escapeHtml(row.name)}</button> <small>${escapeHtml(row.reason)}</small></li>`)
+          .join("")}</ul>`
+      : "";
+    $("workshop-recommend").querySelectorAll("[data-wrec]").forEach((button) => {
+      button.onclick = () => showWorkshopDetails(button.dataset.wrec);
+    });
+  }
+  const rows = data.mods || [];
+  $("workshop-list").innerHTML = rows.length ? rows.map(renderWorkshopCard).join("") : `<p class="empty">No catalog mods match that search.</p>`;
+  $("workshop-list").querySelectorAll("[data-wact]").forEach((button) => {
+    button.onclick = async () => {
+      const card = button.closest("[data-workshop-id]");
+      const id = card && card.dataset.workshopId;
+      if (!id) return;
+      if (button.dataset.wact === "details") return showWorkshopDetails(id);
+      if (button.dataset.wact === "get") return getWorkshopMod(id);
+      await window.tactix.workshopFavoriteToggle(id);
+      await refreshWorkshop();
+    };
+  });
+  await refreshWorkshopInbox();
+}
+
+function renderWorkshopChips() {
+  const host = $("workshop-cats");
+  if (!host || host.dataset.ready === "1") return;
+  host.innerHTML = WORKSHOP_CHIPS.map((chip) => `<button type="button" class="workshop-chip${chip.id === "" ? " is-active" : ""}" data-filter="${escapeHtml(chip.id)}">${escapeHtml(chip.label)}</button>`).join("");
+  host.dataset.ready = "1";
+  host.querySelectorAll(".workshop-chip").forEach((button) => {
+    button.onclick = () => {
+      host.querySelectorAll(".workshop-chip").forEach((row) => row.classList.toggle("is-active", row === button));
+      if ($("workshop-filter")) $("workshop-filter").value = button.dataset.filter || "";
+      refreshWorkshop().catch((error) => addLog({ level: "error", message: userError(error) }));
+    };
+  });
+}
+
+function startWorkshopInboxWatch() {
+  if (workshopInboxTimer) return;
+  workshopInboxTimer = setInterval(() => {
+    if (currentPage === "browse") refreshWorkshopInbox().catch(() => {});
+  }, 4000);
+}
+
 async function showPrefs() {
   const cfg = await window.tactix.settingsGet();
   const profiles = await window.tactix.profileList();
@@ -2648,7 +3128,7 @@ async function showPrefs() {
     <p><label><input id="set-preview" type="checkbox" ${cfg.smartPreviewDefault ? "checked" : ""} /> Smart Install preview default</label></p>
     <p class="muted">If a pack needs RageNativeUI or another curated dependency, Smart Install offers Download &amp; install from the official GitHub release. LCPDFR.com files (like Damage Tracker Framework) still need you to download the zip, then drop it here.</p>
     <p><label><input id="set-guides" type="checkbox" ${cfg.lookupInstallGuides !== false ? "checked" : ""} /> Look up public install notes during preview</label></p>
-    <p><label><input id="set-ai" type="checkbox" ${cfg.aiGuideEnabled ? "checked" : ""} /> Use AI to summarize install notes (optional)</label></p>
+    <p><label><input id="set-ai" type="checkbox" ${cfg.aiGuideEnabled ? "checked" : ""} /> Use AI to summarize install notes and Analyze Mods (optional)</label></p>
     <div class="field">
       <label>AI API key (kept on this PC)</label>
       <input id="set-ai-key" type="password" autocomplete="off" placeholder="${cfg.aiApiKey ? "Saved — leave blank to keep" : "Optional"}" />
@@ -2660,6 +3140,20 @@ async function showPrefs() {
     <p><label>Session retention <input id="set-sess" type="number" min="5" max="200" value="${Number(cfg.sessionRetention) || 40}" /></label></p>
     <p><label>Automatic snapshot retention <input id="set-auto" type="number" min="5" max="40" value="${Number(cfg.autoSnapshotRetention) || 15}" /></label></p>
     <p><label><input id="set-last" type="checkbox" ${cfg.openLastPage ? "checked" : ""} /> Open last active page</label></p>
+    <p class="section-label">Workshop</p>
+    <p>LCPDFR API: ${escapeHtml((cfg.workshopApi && cfg.workshopApi.status) || "not_configured")}${cfg.lcpdfrApiConfigured ? " (key saved on this PC)" : ""}</p>
+    <p class="muted">${escapeHtml((cfg.workshopApi && cfg.workshopApi.message) || "Browse Mods works without a key using the local catalog.")}</p>
+    <div class="field">
+      <label>LCPDFR API key</label>
+      <input id="set-lcpdfr-key" type="password" autocomplete="off" placeholder="${cfg.lcpdfrApiConfigured ? "Saved — leave blank to keep" : "Optional. Never enter your LCPDFR password."}" />
+    </div>
+    <div class="field">
+      <label>Download directory</label>
+      <input id="set-dl-dir" value="${escapeHtml(cfg.workshopDownloadDirectory || "")}" placeholder="Leave blank for your user Downloads folder" />
+    </div>
+    <p><label><input id="set-watch" type="checkbox" ${cfg.workshopWatchDownloads ? "checked" : ""} /> Watch Downloads after Get Mod</label></p>
+    <p><label>Cache retention (hours) <input id="set-cache-hrs" type="number" min="1" max="168" value="${Number(cfg.workshopCacheRetentionHours) || 24}" /></label></p>
+    <p><label><input id="set-open-src" type="checkbox" ${cfg.workshopOpenSourceLinks !== false ? "checked" : ""} /> Open official source links in the browser</label></p>
     <p class="section-label">Appearance</p>
     <div class="theme-switch" role="group" aria-label="Appearance">
       <button id="set-theme-dark" type="button">Dark</button>
@@ -2702,10 +3196,16 @@ async function showPrefs() {
       openLastPage: $("set-last").checked,
       developerMode: $("set-dev").checked,
       theme: prefTheme,
+      workshopDownloadDirectory: $("set-dl-dir").value.trim(),
+      workshopWatchDownloads: $("set-watch").checked,
+      workshopCacheRetentionHours: Number($("set-cache-hrs").value),
+      workshopOpenSourceLinks: $("set-open-src").checked,
     };
     const key = $("set-ai-key").value.trim();
     if (key) patch.aiApiKey = key;
     await window.tactix.settingsSave(patch);
+    const lcpdfr = $("set-lcpdfr-key").value.trim();
+    if (lcpdfr) await window.tactix.workshopSetApiKey(lcpdfr);
     hideOverlay();
   };
 }
@@ -2722,10 +3222,91 @@ document.querySelectorAll(".nav-btn").forEach((button) => {
   };
 });
 
-document.querySelectorAll(".mods-switch [data-mods-panel]").forEach((button) => {
-  button.onclick = () => showModsPanel(button.dataset.modsPanel);
-});
 if ($("btn-refresh")) $("btn-refresh").onclick = () => refreshScreen();
+
+function analyzeRowAction(row) {
+  const fix = row.fix || {};
+  if (fix.fixable) {
+    return `<button class="ghost" type="button" data-fix-id="${escapeHtml(row.installId || "")}" data-fix-source="${escapeHtml(
+      row.source || ""
+    )}">Do this</button>`;
+  }
+  return "";
+}
+
+function showAnalyzeResults(result, report = null) {
+  const todos = result.todos || (result.summary || []).filter((row) => row.nextStep && row.nextStep.needed);
+  const reportLines = ((report && report.results) || [])
+    .map((row) => `<li>${escapeHtml(row.name || "Mod")}: ${escapeHtml(row.message || (row.ok ? "Done." : "Failed."))}</li>`)
+    .join("");
+  const list = todos
+    .slice(0, 40)
+    .map((row, index) => {
+      const step = (row.nextStep && row.nextStep.do) || (row.reasons && row.reasons[0]) || "";
+      return `<li class="${row.fix && row.fix.fixable ? "has-fix" : ""}"><i class="lamp ${row.lamp || "warn"}"></i><div><strong>${
+        index + 1
+      }. ${escapeHtml(row.name)}</strong><small>${escapeHtml(step)}</small></div>${analyzeRowAction(row)}</li>`;
+    })
+    .join("");
+  const canFix = todos.some((row) => row.fix && row.fix.fixable);
+  showOverlay(
+    `
+        <p class="eyebrow">ANALYZE MODS</p>
+        <h2>What to do</h2>
+        ${reportLines ? `<p class="section-label">Just done</p><ul>${reportLines}</ul>` : ""}
+        <ul class="check-list">${list || "<li>Nothing you need to do.</li>"}</ul>
+        <div class="dialog-actions">
+          ${canFix ? `<button id="an-fix-all" type="button">Do everything the app can</button>` : ""}
+          <button id="an-close" class="ghost" type="button">Close</button>
+        </div>
+      `,
+    true
+  );
+  $("an-close").onclick = hideOverlay;
+  if ($("an-fix-all")) $("an-fix-all").onclick = () => applyAnalyzeFix({ all: true });
+  ui.dialog.querySelectorAll("button[data-fix-id]").forEach((button) => {
+    button.onclick = () => applyAnalyzeFix({ installId: button.dataset.fixId, source: button.dataset.fixSource });
+  });
+}
+
+async function applyAnalyzeFix(payload) {
+  try {
+    setBusy(true);
+    const next = payload.all
+      ? await window.tactix.modsFixAll()
+      : await window.tactix.modsFixOne({ installId: payload.installId, source: payload.source });
+    const report = next.report || {};
+    if (report.fixed) addLog({ level: "ok", message: `Fixed ${report.fixed} issue(s) from Analyze Mods.` });
+    if (report.failed) addLog({ level: "error", message: `${report.failed} automatic fix(es) failed.` });
+    if (!report.fixed && !report.failed && next.message) addLog({ level: "warn", message: next.message });
+    const analysis = next.analysis || (await window.tactix.modsAnalyzeAll());
+    renderModCondition(analysis);
+    await refreshSmart();
+    renderState(await window.tactix.state());
+    showAnalyzeResults(analysis, report);
+  } catch (error) {
+    addLog({ level: "error", message: userError(error) });
+  } finally {
+    setBusy(false);
+  }
+}
+
+if ($("btn-analyze-mods")) {
+  $("btn-analyze-mods").onclick = async () => {
+    try {
+      setBusy(true);
+      const result = await window.tactix.modsAnalyzeAll();
+      renderModCondition(result);
+      await refreshSmart();
+      renderState(await window.tactix.state());
+      showAnalyzeResults(result);
+    } catch (error) {
+      addLog({ level: "error", message: userError(error) });
+    } finally {
+      setBusy(false);
+    }
+  };
+}
 document.addEventListener("keydown", (event) => {
   if (event.key === "F5") {
     event.preventDefault();
@@ -2738,6 +3319,18 @@ if ($("btn-troubleshoot")) $("btn-troubleshoot").onclick = () => showTroubleshoo
 if ($("btn-dash-tests")) $("btn-dash-tests").onclick = () => $("btn-tests").click();
 if ($("mod-search")) $("mod-search").oninput = () => renderSmartMods();
 if ($("mod-filter")) $("mod-filter").onchange = () => renderSmartMods();
+if ($("workshop-search")) $("workshop-search").oninput = () => refreshWorkshop().catch((error) => addLog({ level: "error", message: userError(error) }));
+if ($("workshop-filter")) $("workshop-filter").onchange = () => refreshWorkshop().catch((error) => addLog({ level: "error", message: userError(error) }));
+if ($("workshop-import")) {
+  $("workshop-import").onclick = async () => {
+    const files = await window.tactix.pickArchives();
+    if (!files || !files.length) return;
+    await importWorkshopFiles(files, workshopHandoff);
+    await refreshWorkshop();
+  };
+}
+if ($("workshop-refresh")) $("workshop-refresh").onclick = () => refreshWorkshop().catch((error) => addLog({ level: "error", message: userError(error) }));
+startWorkshopInboxWatch();
 
 window.tactix.onLog(addLog);
 window.tactix.onProgress(updateProgress);
@@ -2746,7 +3339,7 @@ refresh().then(async () => {
   addLog({ level: "info", message: "GTA 5 Mod Manager ready. GTA V Enhanced only." });
   refreshSmart();
   refreshDashboard();
-  if (state && state.config && state.config.openLastPage && state.config.lastPage === "mods") showPage("mods");
+  if (state && state.config && state.config.openLastPage && (state.config.lastPage === "mods" || state.config.lastPage === "browse")) showPage(state.config.lastPage);
   else showPage("dashboard");
   if (!state?.config.officialPath || !state?.game.sandboxReady) {
     const found = await window.tactix.detectGame();

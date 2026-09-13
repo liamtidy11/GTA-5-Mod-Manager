@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "note": "Built-in runtime rules only. They improve accuracy for known mods. Generic plugin/framework matching covers future packs without an entry here. Never writes userData.",
+  "rules": [
+    {
+      "id": "damage-tracker-framework",
+      "canonicalModId": "damage-tracker-framework",
+      "kind": "SERVICE",
+      "matchMode": "PRIMARY",
+      "positiveSignals": [
+        { "type": "SERVICE_STARTED", "contains": "DamageTrackerService Started" }
+      ]
+    },
+    {
+      "id": "ragenativeui",
+      "canonicalModId": "ragenativeui",
+      "kind": "FRAMEWORK",
+      "matchMode": "ANY",
+      "allowIndirect": true,
+      "positiveSignals": [
+        { "type": "FRAMEWORK_LOADED", "contains": "RAGENativeUI.dll" }
+      ]
+    },
+    {
+      "id": "lemonui",
+      "canonicalModId": "lemonui",
+      "kind": "FRAMEWORK",
+      "matchMode": "ANY",
+      "allowIndirect": true,
+      "positiveSignals": [
+        { "type": "FRAMEWORK_LOADED", "contains": "LemonUI" }
+      ]
+    },
+    {
+      "id": "ifruitaddon2",
+      "canonicalModId": "ifruitaddon2",
+      "kind": "FRAMEWORK",
+      "matchMode": "ANY",
+      "allowIndirect": true,
+      "positiveSignals": [
+        { "type": "FRAMEWORK_LOADED", "contains": "iFruitAddon2" }
+      ]
+    }
+  ]
+}

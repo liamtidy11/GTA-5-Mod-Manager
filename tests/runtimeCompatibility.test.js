@@ -239,13 +239,42 @@ test("unknown catalog compatibility turns green after a local worked session", (
 
   const warn = modHealthV2.evaluateModHealth(pluginMod(), {});
   assert.equal(warn.status, "WARNING");
-  assert.ok(warn.reasons.some((row) => /compatibility.*unknown/i.test(row)));
+  assert.ok(warn.reasons.some((row) => /waiting for runtime/i.test(row)));
 
   const failed = modHealthV2.evaluateModHealth(pluginMod(), {
     runtime: { status: "FAILED", evidence: "The session terminated FC." },
   });
-  assert.equal(failed.status, "WARNING");
+  assert.equal(failed.status, "BROKEN");
   assert.ok(failed.reasons.some((row) => /terminated FC/i.test(row)));
+});
+
+test("Damage Tracker Framework goes WORKED from DamageTrackerService Started", () => {
+  const dtf = {
+    id: "dtf-1",
+    name: "DamageTrackerFramework 2.0.2",
+    canonicalModId: "damage-tracker-framework",
+    compatibilityStatus: "UNKNOWN",
+    files: [
+      { destination: "DamageTrackerLib.dll" },
+      { destination: "plugins/DamageTrackingFramework.dll" },
+    ],
+  };
+  const log = [
+    "Loading plugin from path: Plugins\\LSPD First Response.dll",
+    "Creating plugin: PolicingRedefined.EntryPoint",
+    "DamageTrackerService Started",
+  ].join("\n");
+  const verdict = runtimeCompatibility.assessLog(dtf, log);
+  assert.equal(verdict.status, "LOADED");
+  assert.match(verdict.evidence, /DamageTrackerService Started/);
+
+  const duty = tmpDir("dtf-duty-");
+  fs.writeFileSync(path.join(duty, "RagePluginHook.log"), log, "utf8");
+  const live = runtimeCompatibility.lookupLive({ mods: {} }, dtf, duty);
+  assert.equal(live.status, "WORKED");
+  const health = modHealthV2.evaluateModHealth(dtf, { runtime: live, ignoreUnknownCompatibility: false });
+  assert.equal(health.status, "HEALTHY");
+  cleanup(duty);
 });
 
 test("trusted incompatible is not overridden by a local worked session", () => {

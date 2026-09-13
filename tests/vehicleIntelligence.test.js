@@ -337,6 +337,40 @@ test("classifyVehicle does not invent an installable type from empty scans", () 
   assert.equal(result.archiveRequired, false);
 });
 
+test("a callout pack with optional-addon README is not a vehicle mod", async () => {
+  const files = {
+    "plugins/LSPDFR/chillLScallouts.dll": "dll",
+    "plugins/LSPDFR/chillLScallouts.ini": "ini",
+    "lspdfr/audio/scanner/ChillLSCalloutsAudio/VehicleBlocking.wav": "wav",
+    "CalloutInterfaceAPI.dll": "api",
+    "RAGENativeUI.dll": "ui",
+    "CHillLSCallouts Texture.oiv": "oiv",
+    "README.txt":
+      "A LSPDFR Callout Pack.\nSimuDispatch v2: recommended optional addon for players using dispatch.\nInvestigate an abandoned patrol vehicle.\n",
+  };
+  const { root, result } = analyzePack(files);
+  assert.equal(result.detected, false);
+  assert.equal(result.archiveRequired, false);
+  assert.equal(result.kind, null);
+  assert.equal(result.readme.addonHint, false);
+
+  const duty = makeFakeDuty();
+  const dataDir = tmpDir("data-");
+  const staging = tmpDir("staging-");
+  const preview = await smartInstall.analyze({
+    source: root,
+    dutyPath: duty,
+    dataDir,
+    stagingRoot: staging,
+    vehiclePathMap: TEST_MAP,
+  });
+  assert.equal(preview.archiveRequired, false);
+  assert.notEqual(preview.type, "Vehicle Replacement");
+  assert.notEqual(preview.type, "Vehicle Mod");
+  assert.notEqual(preview.recommendation.status, "UNSUPPORTED");
+  cleanup(root, duty, dataDir, staging);
+});
+
 test("generic installer guard strips yft/ytd from copy lists", () => {
   const guarded = applyGenericInstallerArchiveGuard([
     { from: "police3.yft", to: "police3.yft" },

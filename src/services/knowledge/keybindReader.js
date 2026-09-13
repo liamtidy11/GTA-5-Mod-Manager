@@ -66,6 +66,8 @@ function prettyKeys(value) {
       const raw = part.trim();
       const lower = raw.toLowerCase();
       if (PRETTY[lower]) return PRETTY[lower];
+      const numpad = raw.match(/^numpad(\d)$/i);
+      if (numpad) return `NumPad ${numpad[1]}`;
       if (/^f\d{1,2}$/i.test(raw) || raw.length === 1) return raw.toUpperCase();
       return raw.replace(/([a-z])([A-Z])/g, "$1 $2");
     })
@@ -184,8 +186,12 @@ function parseText(text, file) {
   return parseReadme(text, file);
 }
 
+function catalogEntry(modId) {
+  return (loadCatalog().mods || {})[modId] || null;
+}
+
 function catalogBinds(modId) {
-  const entry = (loadCatalog().mods || {})[modId];
+  const entry = catalogEntry(modId);
   if (!entry) return [];
   return (entry.binds || []).map((bind) => ({
     action: bind.action,
@@ -194,6 +200,26 @@ function catalogBinds(modId) {
     source: "typical",
     file: entry.source || "Typical defaults",
   }));
+}
+
+function knownConfigFiles(canonicalModId, database) {
+  const files = [];
+  const catalog = catalogEntry(canonicalModId);
+  for (const file of (catalog && catalog.configFiles) || []) {
+    files.push(file);
+  }
+  const knowledge = ((database && database.mods) || []).find((row) => row.id === canonicalModId);
+  for (const name of (knowledge && knowledge.recognition && knowledge.recognition.configNames) || []) {
+    const rel = String(name || "").replace(/\\/g, "/");
+    files.push(rel.includes("/") ? rel : `plugins/LSPDFR/${rel}`);
+  }
+  const seen = new Set();
+  return files.filter((file) => {
+    const key = String(file || "").replace(/\\/g, "/").toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function uniqueBinds(rows) {
@@ -220,10 +246,20 @@ function collectFromFiles(files, dutyPath) {
   return out;
 }
 
-function readKeybinds({ mod = {}, manifest = {}, dutyPath = "", canonicalModId = "" } = {}) {
-  const files = (manifest && manifest.files) || mod.files || [];
+function readKeybinds({
+  mod = {},
+  manifest = {},
+  dutyPath = "",
+  canonicalModId = "",
+  database = null,
+} = {}) {
+  const id = canonicalModId || mod.canonicalModId || "";
+  const files = [...((manifest && manifest.files) || []), ...(mod.files || [])];
+  for (const dest of knownConfigFiles(id, database)) {
+    files.push({ destination: dest });
+  }
   const fromFiles = dutyPath ? collectFromFiles(files, dutyPath) : [];
-  const typical = catalogBinds(canonicalModId || mod.canonicalModId || "");
+  const typical = catalogBinds(id);
   const configBinds = fromFiles.filter((row) => row.source === "config");
   const readmeBinds = fromFiles.filter((row) => row.source === "readme");
   const binds = uniqueBinds(configBinds.length ? [...configBinds, ...readmeBinds] : [...typical, ...readmeBinds]);
@@ -248,4 +284,5 @@ module.exports = {
   prettyKeys,
   humanize,
   looksLikeBind,
+  knownConfigFiles,
 };

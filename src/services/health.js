@@ -7,6 +7,8 @@ const { unregisteredPacks } = require("./dlclist");
 const registry = require("./registry");
 const { verifyLaunchIntegrity } = require("./launchguard");
 const overlays = require("./overlays");
+const launchArgs = require("./launchArgs");
+const dutyWarnings = require("./knowledge/dutyWarnings");
 
 function fileIn(root, ...parts) {
   return path.join(root || "", ...parts);
@@ -374,6 +376,9 @@ function runChecks(sandboxPath, officialPath, options = {}) {
 
   if (sandboxPath) checks.push(...conflictChecks(sandboxPath));
 
+  const warningScan = dutyWarnings.functionTestChecks(sandboxPath);
+  checks.push(...warningScan.checks);
+
   const compat = summarizeModCompatibility(options.dataDir || "");
   if (compat) checks.push(compat);
 
@@ -407,6 +412,7 @@ function runChecks(sandboxPath, officialPath, options = {}) {
     total: checks.length,
     checks,
     dlc,
+    dutyWarnings: warningScan ? warningScan.dutyWarnings : [],
   };
 }
 
@@ -420,7 +426,8 @@ const LOG_NAMES = [
 ];
 
 const CRASH_LINE = /error|exception|fatal|crash|terminated|failed to load|could not|missing/i;
-const NOISE_LINE = /errorcode|error codes|0 error/i;
+const NOISE_LINE =
+  /errorcode|error codes|0 error|address mismatch|specified twice|failed to parse\s+as chance|getoutfitvariation|cannot create an abstract class|attempted to start callout|notimplementedexception|backupmanager\.cs|\[d3d12\]/i;
 
 function readTail(file, maxBytes = 80_000) {
   try {
@@ -530,7 +537,10 @@ function collectLogs(sandboxPath) {
 function d3dHookDied(sandboxPath) {
   try {
     const text = fs.readFileSync(fileIn(sandboxPath, "RagePluginHook.log"), "utf8");
-    return /\[d3d12\] Hooking game swap chain/i.test(text) && !/\[d3d12\] Hooked/i.test(text);
+    const hooked = /\[d3d12\] Hooked/i.test(text);
+    const started = /\[d3d12\] Hooking game swap chain/i.test(text);
+    const failed = /\[d3d12\].{0,120}(?:failed|fatal|crash|device)/i.test(text);
+    return started && !hooked && failed;
   } catch {
     return false;
   }
@@ -563,11 +573,14 @@ function summarizeCrash(sandboxPath) {
   if (
     /LSPD First Response/i.test(blob) &&
     /FileNotFoundException|or one of its dependencies/i.test(blob) &&
-    has(sandboxPath, "plugins", "SlimDX.dll") &&
+    (has(sandboxPath, "plugins", "SlimDX.dll") || has(sandboxPath, "plugins", "LSPDFR", "SlimDX.dll")) &&
     has(sandboxPath, "plugins", "LSPD First Response.dll")
   ) {
     summary =
       "Old session: LSPDFR failed because support DLLs were not next to the game exe. Launch again after Play LSPDFR repairs the layout.";
+  } else if (/WeaponSkin/i.test(blob) && /AccessViolationException/i.test(blob)) {
+    summary =
+      "LSPDFR crashed while going on duty (WeaponSkin). The plugin pack never loaded. This is not a missing-mod layout problem.";
   }
   return {
     at: top.mtime,
@@ -600,9 +613,13 @@ function ensureNoBattlEye(sandboxPath) {
   } catch {
     current = "";
   }
-  if (/(?:^|\s)-nobattleye\b/i.test(current)) return { ok: true, file, changed: false };
+  if (/(?:^|\s)-nobattleye\b/i.test(current)) {
+    launchArgs.removeFlagFromFile(fileIn(sandboxPath, "args.txt"));
+    return { ok: true, file, changed: false };
+  }
   const next = `${current.trim()}\n-nobattleye\n`.trimStart();
   fs.writeFileSync(file, next, "utf8");
+  launchArgs.removeFlagFromFile(fileIn(sandboxPath, "args.txt"));
   return { ok: true, file, changed: true };
 }
 
@@ -629,44 +646,15 @@ function parseNewFindings(previous, nextText) {
   return { findings, lineCount: lines.length };
 }
 
-function sampleKeyFiles(mod) {
-  const files = (mod.files || []).map((file) => String(file).replace(/\//g, "\\"));
-  const rank = (file) => {
-    const n = file.toLowerCase();
-    if (/lspd first response\.dll$/i.test(n) && /^plugins\\/i.test(n) && !/plugins\\lspdfr\\/i.test(n)) return 0;
-    if (/ragepluginhook\.exe$/i.test(n)) return 1;
-    if (/\.asi$/i.test(n)) return 2;
-    if (/dlc\.rpf$/i.test(n)) return 3;
-    if (/\.(dll|exe)$/i.test(n) && !/plugins\\lspdfr\\/i.test(n) && !/licenses\\/i.test(n)) return 4;
-    return 8;
-  };
-  const important = files.filter((file) => rank(file) < 8).sort((a, b) => rank(a) - rank(b));
-  return (important.length ? important : files).slice(0, 8);
-}
-
-function withModStatus(sandboxPath, mods) {
-  let logText = "";
-  try {
-    logText = fs.readFileSync(fileIn(sandboxPath, "RagePluginHook.log"), "utf8");
-  } catch {
-    logText = "";
-  }
-  const pluginFailed = /Failed to load plugin/i.test(logText) && /LSPD First Response/i.test(logText);
-
-  return (mods || []).map((mod) => {
-    if (mod.enabled === false) {
-      return { ...mod, lamp: "bad", lampLabel: "Not working", lampDetail: "Disabled" };
-    }
-    const keys = sampleKeyFiles(mod);
-    const missing = keys.filter((rel) => !has(sandboxPath, rel));
-    if (missing.length && missing.length >= Math.max(1, Math.ceil(keys.length * 0.5))) {
-      return { ...mod, lamp: "bad", lampLabel: "Not working", lampDetail: "Files missing from the LSPDFR folder" };
-    }
-    const kinds = mod.kinds || [];
-    if ((kinds.includes("lspdfr") || kinds.includes("rage")) && pluginFailed) {
-      return { ...mod, lamp: "bad", lampLabel: "Not working", lampDetail: "Rage Plugin Hook failed to load LSPDFR" };
-    }
-    return { ...mod, lamp: "ok", lampLabel: "Working", lampDetail: "Enabled and files are in the LSPDFR folder" };
+function withModStatus(sandboxPath, mods, extras = {}) {
+  const modCondition = require("./knowledge/modCondition");
+  return modCondition.attachLamps(mods, {
+    dutyPath: sandboxPath,
+    source: "FOLDER",
+    sessions: extras.sessions || [],
+    profiles: extras.profiles || [],
+    runtimeDb: extras.runtimeDb || null,
+    dataDir: extras.dataDir || "",
   });
 }
 

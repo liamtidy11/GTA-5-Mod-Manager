@@ -51,10 +51,26 @@ function stripFlag(text) {
 
 function setFolderFlag(folder, off) {
   if (!folder || !exists(folder)) return false;
-  const files = [commandLinePath(folder), argsPath(folder)];
+  const cmd = commandLinePath(folder);
+  const args = argsPath(folder);
   let ok = true;
-  for (const file of files) {
-    const next = off ? addFlag(readText(file)) : stripFlag(readText(file));
+  if (off) {
+    const next = addFlag(readText(cmd));
+    if (!writeText(cmd, next.endsWith("\n") ? next : `${next}\n`)) ok = false;
+    const argsNext = stripFlag(readText(args));
+    if (argsNext) {
+      if (!writeText(args, `${argsNext}\n`)) ok = false;
+    } else if (exists(args)) {
+      try {
+        fs.rmSync(args, { force: true });
+      } catch {
+        ok = false;
+      }
+    }
+    return ok;
+  }
+  for (const file of [cmd, args]) {
+    const next = stripFlag(readText(file));
     if (next) {
       if (!writeText(file, `${next}\n`)) ok = false;
     } else if (exists(file)) {
@@ -176,4 +192,5 @@ module.exports = {
   setOff,
   setOn,
   status,
+  setFolderFlag,
 };

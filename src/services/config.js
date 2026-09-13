@@ -22,6 +22,10 @@ const DEFAULTS = {
   aiGuideEnabled: false,
   aiApiKey: "",
   aiApiUrl: "",
+  workshopDownloadDirectory: "",
+  workshopWatchDownloads: false,
+  workshopCacheRetentionHours: 24,
+  workshopOpenSourceLinks: true,
 };
 
 function configPath(userData) {

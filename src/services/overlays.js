@@ -1,6 +1,15 @@
 const { execFileSync, spawn } = require("child_process");
 
 const OVERLAY_IMAGES = ["NVIDIA Overlay.exe", "NVIDIA Share.exe"];
+const DETECT_IMAGES = [
+  ["nvidiaOverlay", "NVIDIA Overlay.exe"],
+  ["nvidiaShare", "NVIDIA Share.exe"],
+  ["discord", "Discord.exe"],
+  ["steamOverlay", "GameOverlayUI.exe"],
+  ["rtss", "RTSS.exe"],
+  ["afterburner", "MSIAfterburner.exe"],
+  ["razerCortex", "RazerCortex.exe"],
+];
 const ANSEL_GTA = "HKCU\\Software\\NVIDIA Corporation\\Ansel\\Grand Theft Auto V Enhanced";
 
 function processRunning(image) {
@@ -63,14 +72,16 @@ function suppressOverlaysDuringHook() {
 }
 
 function overlayStatus() {
-  return {
-    nvidiaOverlay: processRunning("NVIDIA Overlay.exe"),
-    nvidiaShare: processRunning("NVIDIA Share.exe"),
-  };
+  const status = {};
+  for (const [key, image] of DETECT_IMAGES) {
+    status[key] = processRunning(image);
+  }
+  return status;
 }
 
 module.exports = {
   OVERLAY_IMAGES,
+  DETECT_IMAGES,
   closeGraphicsOverlays,
   suppressOverlaysDuringHook,
   overlayStatus,

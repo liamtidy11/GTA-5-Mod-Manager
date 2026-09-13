@@ -13,7 +13,8 @@ const REPLACE_RE = new RegExp(
   `\\b(?:replace(?:s|ment)?|install(?:s|ed)?\\s+as|use\\s+as|as)\\s+(${SLOT_ALT}|[a-z][a-z0-9_]{1,24})\\b`,
   "ig"
 );
-const ADDON_RE = /\b(add[-\s]?on|addon|dlcpack|dlc pack|vehicle slot)\b/i;
+const ADDON_RE =
+  /\b(?:(?:add[-\s]?on|addon)\s+(?:vehicle|car|dlc)|(?:vehicle|car)\s+(?:add[-\s]?on|addon)|dlcpacks?|dlc pack|vehicle slot)\b/i;
 
 function isDocFile(rel) {
   const base = path.basename(String(rel || "").replace(/\\/g, "/"));

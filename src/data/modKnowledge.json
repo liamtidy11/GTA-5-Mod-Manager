@@ -290,6 +290,86 @@
       "incompatibleWith": [],
       "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
       "notes": []
+    },
+    {
+      "id": "callout-interface",
+      "name": "Callout Interface",
+      "aliases": ["CalloutInterface", "Callout Interface"],
+      "authors": ["Immersive Plugins Team"],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["CalloutInterface.dll"],
+        "archivePatterns": ["calloutinterface", "callout-interface"],
+        "folderPatterns": ["plugins/LSPDFR/CalloutInterface"],
+        "configNames": ["CalloutInterface.ini"],
+        "readmeTerms": ["callout interface"]
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "grammar-police",
+      "name": "Grammar Police",
+      "aliases": ["GrammarPolice", "Grammar Police"],
+      "authors": ["Immersive Plugins Team"],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["GrammarPolice.dll"],
+        "archivePatterns": ["grammarpolice", "grammar-police"],
+        "folderPatterns": ["plugins/LSPDFR/GrammarPolice"],
+        "configNames": ["GrammarPolice.ini"],
+        "readmeTerms": ["grammar police"]
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "chill-ls-callouts",
+      "name": "Chill LS Callouts",
+      "aliases": ["ChillLSCallouts", "chillLScallouts", "Chill LS Callouts"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["chillLScallouts.dll", "ChillLSCallouts.dll"],
+        "archivePatterns": ["chilllscallouts", "chill-ls-callouts"],
+        "folderPatterns": ["plugins/LSPDFR/ChillLSCallouts"],
+        "configNames": ["chillLScallouts.ini"],
+        "readmeTerms": ["chillls callouts", "chill ls callouts"]
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
+    },
+    {
+      "id": "super-callouts",
+      "name": "SuperCallouts",
+      "aliases": ["SuperCallouts", "Super Callouts"],
+      "authors": [],
+      "category": "LSPDFR_PLUGIN",
+      "recognition": {
+        "dllNames": ["SuperCallouts.dll"],
+        "archivePatterns": ["supercallouts", "super-callouts"],
+        "folderPatterns": ["plugins/LSPDFR/SuperCallouts"],
+        "configNames": ["SuperCallouts.ini"],
+        "readmeTerms": ["supercallouts"]
+      },
+      "dependencies": [],
+      "optionalDependencies": [],
+      "conflicts": [],
+      "incompatibleWith": [],
+      "compatibility": { "gtaEnhanced": "UNKNOWN", "lspdfr": {}, "ragePluginHook": {} },
+      "notes": []
     }
   ]
 }

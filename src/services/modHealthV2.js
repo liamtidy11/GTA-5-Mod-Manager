@@ -12,6 +12,17 @@ const STATES = {
 
 const FAILED_RESULTS = new Set(["GAME_CRASH", "RPH_CRASH", "LSPDFR_CRASH"]);
 
+function destOf(file) {
+  return typeof file === "string" ? file : (file && (file.destination || file.dest)) || "";
+}
+
+function hasManagedRuntimeFiles(mod) {
+  return (mod.files || []).some((file) => {
+    const dest = String(destOf(file)).replace(/\\/g, "/");
+    return /(?:^|\/)plugins\/(?:lspdfr\/)?[^/]+\.(dll|asi)$/i.test(dest) || /(?:^|\/)[^/]+\.asi$/i.test(dest);
+  });
+}
+
 function modWasEnabled(session, installId) {
   return (session.mods || []).some((mod) => (mod.installId === installId || mod.id === installId) && mod.enabled !== false);
 }
@@ -71,11 +82,9 @@ function evaluateModHealth(mod = {}, context = {}) {
     return { installId, status: STATES.BROKEN, reasons, crash, profiles };
   }
 
-  // Non-fatal issues accumulate into WARNING with explicit reasons.
+  // Non-fatal diagnosis issues become explicit warning reasons.
   for (const issue of (diagnosis && diagnosis.issues) || []) {
-    if (issue.code === "FILE_CHANGED_OUTSIDE") reasons.push(issue.message);
-    else if (issue.code === "BACKUP_MISSING") reasons.push(issue.message);
-    else if (issue.code === "STORE_MISSING") reasons.push(issue.message);
+    if (issue && issue.message) reasons.push(issue.message);
   }
 
   const depSummary = mod.dependencySummary || {};
@@ -84,8 +93,13 @@ function evaluateModHealth(mod = {}, context = {}) {
   }
 
   const runtime = context.runtime || null;
-  const runtimeWorked = runtime && runtime.status === "WORKED";
+  const runtimeWorked = runtime && (runtime.status === "WORKED" || runtime.status === "WORKING");
   const runtimeFailed = runtime && runtime.status === "FAILED";
+  const expectsRuntime =
+    context.expectsRuntime === true ||
+    (context.expectsRuntime !== false &&
+      context.ignoreUnknownCompatibility !== true &&
+      hasManagedRuntimeFiles(mod));
 
   const compat = String(mod.compatibilityStatus || mod.compatibility || "UNKNOWN").toUpperCase();
   if (compat === "INCOMPATIBLE") {
@@ -93,12 +107,14 @@ function evaluateModHealth(mod = {}, context = {}) {
     return { installId, status: STATES.BROKEN, reasons, crash, profiles, runtime };
   }
   if (compat === "WARNING") reasons.push("A compatibility warning applies to this mod.");
-  else if (compat === "UNKNOWN" && !runtimeWorked && !runtimeFailed) {
-    reasons.push("Compatibility with this Duty setup is unknown.");
-  }
 
   if (runtimeFailed) {
     reasons.push(runtime.evidence || "The last Duty session showed this plugin failed to stay loaded.");
+    return { installId, status: STATES.BROKEN, reasons, crash, profiles, runtime };
+  }
+
+  if (!runtimeWorked && expectsRuntime) {
+    reasons.push("Installed. Waiting for runtime verification.");
   }
 
   if (crash.level === "HIGH" || crash.level === "MEDIUM") {
@@ -117,7 +133,7 @@ function evaluateModHealth(mod = {}, context = {}) {
           : runtime.evidence || "This install loaded in a local Duty session."
       );
     } else {
-      reasons.push("Manifest valid, files present, no blocking issues.");
+      reasons.push(context.healthyReason || "Manifest valid, files present, no blocking issues.");
     }
   }
 

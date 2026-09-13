@@ -17,7 +17,7 @@ function filePath(dataRoot) {
 }
 
 function emptyDb() {
-  return { schemaVersion: SCHEMA_VERSION, processedSessions: {}, mods: {} };
+  return { schemaVersion: SCHEMA_VERSION, processedSessions: {}, mods: {}, history: {} };
 }
 
 function normalizeRow(raw) {
@@ -35,6 +35,10 @@ function normalizeRow(raw) {
     at: raw.at ? String(raw.at) : null,
     evidence: raw.evidence ? String(raw.evidence).trim().slice(0, 240) : "",
     source: "LOCAL_VERIFIED_DATA",
+    version: raw.version ? String(raw.version) : "",
+    hash: raw.hash ? String(raw.hash) : "",
+    confidence: raw.confidence ? String(raw.confidence) : "",
+    ruleTier: raw.ruleTier ? String(raw.ruleTier) : "",
   };
 }
 
@@ -49,7 +53,8 @@ function load(dataRoot) {
     }
     const processedSessions =
       raw && typeof raw.processedSessions === "object" && raw.processedSessions ? { ...raw.processedSessions } : {};
-    return { schemaVersion: SCHEMA_VERSION, processedSessions, mods };
+    const history = raw && typeof raw.history === "object" && raw.history ? raw.history : {};
+    return { schemaVersion: SCHEMA_VERSION, processedSessions, mods, history };
   } catch {
     return emptyDb();
   }
@@ -62,27 +67,61 @@ function pruneProcessed(processed) {
 
 function save(dataRoot, db) {
   fs.mkdirSync(root(dataRoot), { recursive: true });
-  const clean = { schemaVersion: SCHEMA_VERSION, processedSessions: pruneProcessed(db && db.processedSessions), mods: {} };
+  const clean = { schemaVersion: SCHEMA_VERSION, processedSessions: pruneProcessed(db && db.processedSessions), mods: {}, history: {} };
   for (const [key, value] of Object.entries((db && db.mods) || {})) {
     const row = normalizeRow(value);
     if (row) clean.mods[key] = row;
   }
+  if (db && db.history && typeof db.history === "object") clean.history = db.history;
   const tmp = `${filePath(dataRoot)}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(clean, null, 2)}\n`, "utf8");
   fs.renameSync(tmp, filePath(dataRoot));
   return clean;
 }
 
+function matchesFingerprint(row, mod = {}) {
+  if (!row) return false;
+  const version = String(mod.version || "").trim();
+  const hash = String((mod.sourceArchiveHash || (mod.files && mod.files[0] && mod.files[0].hash) || "").trim());
+  if (row.version && version && row.version !== "UNKNOWN" && version !== "UNKNOWN" && row.version !== version) return false;
+  if (row.hash && hash && row.hash !== hash) return false;
+  return true;
+}
+
 function lookup(db, mod = {}) {
   const installId = mod.id || mod.installId;
   const canonical = mod.canonicalModId;
-  if (installId && db && db.mods && db.mods[installId]) return db.mods[installId];
-  if (canonical && db && db.mods) {
-    for (const row of Object.values(db.mods)) {
-      if (row.canonicalModId && row.canonicalModId === canonical) return row;
+  let row = null;
+  if (installId && db && db.mods && db.mods[installId]) row = db.mods[installId];
+  else if (canonical && db && db.mods) {
+    for (const item of Object.values(db.mods)) {
+      if (item.canonicalModId && item.canonicalModId === canonical) {
+        row = item;
+        break;
+      }
     }
   }
-  return null;
+  if (row && !matchesFingerprint(row, mod)) return null;
+  return row;
+}
+
+function bumpHistory(db, installId, version, status) {
+  if (!db || !installId) return;
+  if (!db.history) db.history = {};
+  const ver = String(version || "UNKNOWN");
+  if (!db.history[installId]) db.history[installId] = {};
+  if (!db.history[installId][ver]) db.history[installId][ver] = { worked: 0, failed: 0 };
+  if (status === STATUSES.WORKED) db.history[installId][ver].worked += 1;
+  if (status === STATUSES.FAILED) db.history[installId][ver].failed += 1;
+}
+
+function versionHistory(db, installId) {
+  const rows = (db && db.history && db.history[installId]) || {};
+  return Object.entries(rows).map(([version, counts]) => ({
+    version,
+    worked: Number(counts.worked) || 0,
+    failed: Number(counts.failed) || 0,
+  }));
 }
 
 function getEvidence(dataRoot, mod) {
@@ -120,4 +159,7 @@ module.exports = {
   upsertRow,
   sessionProcessed,
   markSessionProcessed,
+  matchesFingerprint,
+  bumpHistory,
+  versionHistory,
 };

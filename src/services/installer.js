@@ -8,6 +8,7 @@ const dlclist = require("./dlclist");
 const { buildPlanFiles, readAssemblyCopies, isJunk, slugPack, RPH_ROOT_DLLS } = require("./modtypes");
 const { exists, safeJoin, tactixDir, isEnhancedFolder } = require("./paths");
 const environmentInventory = require("./environmentInventory");
+const pluginSupportLayout = require("./knowledge/pluginSupportLayout");
 const { applyGenericInstallerArchiveGuard } = require("./vehicle/vehiclePackageAnalyzer");
 
 const execFileAsync = promisify(execFile);
@@ -296,7 +297,7 @@ function repairLspdfrLayout(sandboxPath) {
 <configuration>
   <runtime>
     <assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">
-      <probing privatePath="LSPDFR"/>
+      <probing privatePath="LSPDFR;.."/>
     </assemblyBinding>
   </runtime>
 </configuration>
@@ -346,6 +347,8 @@ function repairLspdfrLayout(sandboxPath) {
       /* file may be locked by a running game */
     }
   }
+  pluginSupportLayout.clearStraySupportDlls(sandboxPath);
+  pluginSupportLayout.mirrorPluginLibraries(sandboxPath);
   environmentInventory.invalidate({ dutyPath: sandboxPath });
 }
 

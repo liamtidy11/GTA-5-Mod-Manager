@@ -35,7 +35,9 @@ function classifyVehicle({ groups = [], files = [], readme = {} } = {}) {
   const addon = hasAddonStructure(files);
   const vehicleGroups = groups.filter((g) => g.model || g.highDetailModel || g.texture);
   const replacementGroups = vehicleGroups.filter((g) => isKnownSlot(g.slot) && g.model);
-  const detected = vehicleGroups.length > 0 || addon.present || Boolean(readme.addonHint);
+  // README words like "optional addon" are not vehicle proof. Need models,
+  // textures, or add-on DLC files before this is treated as a car pack.
+  const detected = vehicleGroups.length > 0 || addon.present;
 
   if (!detected) {
     return {

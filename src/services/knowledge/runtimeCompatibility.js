@@ -3,6 +3,7 @@ const path = require("path");
 const { RPH_ROOT_DLLS } = require("../modtypes");
 const { normalizeDutyDest } = require("./gameTreeNormalize");
 const evidenceStore = require("./runtimeEvidence");
+const dutyLogScan = require("./dutyLogScan");
 
 // Per-mod in-game checks from Duty logs. Works for current installs and any
 // future pack — identity comes from that mod's own files/name, not a fixed list.
@@ -22,6 +23,7 @@ const LIBRARY_DLLS = new Set([
   "irrklang.net4.dll",
   "irrklang.net.dll",
   "newtonsoft.json.dll",
+  "damagetrackerlib.dll",
 ]);
 
 const SILENT_EXT =
@@ -240,70 +242,26 @@ function hookLoaded(text) {
 }
 
 function assessLog(mod, text, catalog) {
-  const ident = identities(mod, catalog);
-  if (ident.skip) return { status: null, kind: "SKIPPED", evidence: "" };
-  const failed = pluginFailed(text, ident);
-  if (failed) return { status: "FAILED", kind: "PLUGIN_LOG", evidence: failed };
-  if (ident.hook) {
-    const hook = hookLoaded(text);
-    return hook ? { status: "LOADED", kind: "HOOK_LOG", evidence: hook } : { status: null, kind: "HOOK_UNSEEN", evidence: "" };
-  }
-  if (ident.observables.length) {
-    const loaded = pluginLoaded(text, ident);
-    return loaded
-      ? { status: "LOADED", kind: ident.observables[0].kind === "ASI" ? "ASI_LOG" : "PLUGIN_LOG", evidence: loaded }
-      : { status: null, kind: "PLUGIN_UNSEEN", evidence: "" };
-  }
-  if (ident.silent) return { status: "SILENT", kind: "SILENT", evidence: "" };
-  return { status: null, kind: "UNOBSERVABLE", evidence: "" };
+  const runtimeVerify = require("./runtimeVerify");
+  return runtimeVerify.toLegacy(runtimeVerify.evaluate(mod, { logText: text, catalog }));
 }
 
 function readBoundedWindow(filePath, maxBytes = LOG_WINDOW_BYTES) {
-  try {
-    const stat = fs.statSync(filePath);
-    if (!stat.isFile()) return "";
-    const start = stat.size > maxBytes ? stat.size - maxBytes : 0;
-    const fd = fs.openSync(filePath, "r");
-    try {
-      const buf = Buffer.alloc(stat.size - start);
-      fs.readSync(fd, buf, 0, buf.length, start);
-      return buf.toString("utf8");
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return "";
-  }
+  return dutyLogScan.readBoundedWindow(filePath, maxBytes);
 }
 
 function candidateLogPaths(session, dutyPath) {
-  const paths = [];
-  for (const log of (session && session.logs) || []) {
-    if (log && log.path) paths.push(log.path);
-  }
   const duty = dutyPath || (session && session.dutyPath) || "";
-  if (duty) {
-    paths.push(path.join(duty, "RagePluginHook.log"));
-    paths.push(path.join(duty, "plugins", "LSPDFR", "RagePluginHook.log"));
-    paths.push(path.join(duty, "plugins", "LSPDFR", "LSPDFR.log"));
-    paths.push(path.join(duty, "asiload.log"));
-  }
-  const seen = new Set();
-  const unique = [];
-  for (const file of paths) {
-    const key = String(file).toLowerCase();
-    if (!file || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(file);
-  }
-  return unique;
+  return dutyLogScan.collectLogFiles(session, duty).map((file) => file.path);
+}
+
+function collectLogFiles(session, dutyPath) {
+  const duty = dutyPath || (session && session.dutyPath) || "";
+  return dutyLogScan.collectLogFiles(session, duty);
 }
 
 function readSessionLogs(session, dutyPath) {
-  return candidateLogPaths(session, dutyPath)
-    .map((file) => readBoundedWindow(file))
-    .filter(Boolean)
-    .join("\n");
+  return dutyLogScan.joinLogFiles(collectLogFiles(session, dutyPath));
 }
 
 function enabledInSession(session, installId) {
@@ -321,7 +279,8 @@ function recordFromSession({ dataDir, dutyPath = "", session, mods = [], catalog
   const db = evidenceStore.load(dataDir);
   if (evidenceStore.sessionProcessed(db, session.sessionId)) return { recorded: [], skipped: true };
 
-  const text = logText == null ? readSessionLogs(session, dutyPath) : String(logText || "");
+  const logFiles = logText == null ? collectLogFiles(session, dutyPath) : [];
+  const text = logText == null ? dutyLogScan.joinLogFiles(logFiles) : String(logText || "");
   const recorded = [];
 
   for (const mod of mods) {
@@ -329,33 +288,50 @@ function recordFromSession({ dataDir, dutyPath = "", session, mods = [], catalog
     if (!installId || mod.enabled === false) continue;
     if (!enabledInSession(session, installId)) continue;
 
-    const verdict = assessLog(mod, text, catalog);
-    if (verdict.status === "FAILED") {
+    const runtimeVerify = require("./runtimeVerify");
+    const print = require("./dllOwnership").fingerprint(mod);
+    const sessionMod = (session.mods || []).find((row) => row.installId === installId || row.id === installId);
+    if (sessionMod && sessionMod.version && print.version && sessionMod.version !== "UNKNOWN" && print.version !== "UNKNOWN" && sessionMod.version !== print.version) {
+      continue;
+    }
+    const verdict = runtimeVerify.evaluate(mod, { logText: text, logFiles, catalog, dataDir, session, mods, sessionMod });
+    const legacy = runtimeVerify.toLegacy(verdict);
+    if (legacy.status === "FAILED") {
       const row = evidenceStore.upsertRow(db, {
         installId,
         canonicalModId: mod.canonicalModId || null,
         status: "FAILED",
-        kind: verdict.kind,
+        kind: legacy.kind,
         sessionId: session.sessionId,
-        evidence: verdict.evidence,
+        evidence: legacy.evidence,
+        version: print.version,
+        hash: print.hash,
+        confidence: verdict.confidence,
+        ruleTier: verdict.tier,
       });
+      evidenceStore.bumpHistory(db, installId, print.version, "FAILED");
       if (row) recorded.push(row);
       continue;
     }
     if (!sessionAllowsWorked(session)) continue;
-    if (verdict.status === "LOADED") {
+    if (legacy.status === "LOADED") {
       const row = evidenceStore.upsertRow(db, {
         installId,
         canonicalModId: mod.canonicalModId || null,
         status: "WORKED",
-        kind: verdict.kind,
+        kind: legacy.kind,
         sessionId: session.sessionId,
-        evidence: verdict.evidence || "This install loaded in a local Duty session.",
+        evidence: legacy.evidence || "This install loaded in a local Duty session.",
+        version: print.version,
+        hash: print.hash,
+        confidence: verdict.confidence,
+        ruleTier: verdict.tier,
       });
+      evidenceStore.bumpHistory(db, installId, print.version, "WORKED");
       if (row) recorded.push(row);
       continue;
     }
-    if (verdict.status === "SILENT") {
+    if (legacy.status === "SILENT") {
       const duration = Number(session.durationMs);
       if (Number.isFinite(duration) && duration > 0 && duration < SILENT_MIN_MS) continue;
       const row = evidenceStore.upsertRow(db, {
@@ -386,13 +362,89 @@ function adoptFromSessions({ dataDir, dutyPath = "", sessions = [], mods = [], c
   return { recorded };
 }
 
+function matchingSession(sessions, mod) {
+  const print = require("./dllOwnership").fingerprint(mod);
+  const installId = print.installId || mod.id || mod.installId;
+  if (!installId) return null;
+  for (const session of sessions || []) {
+    const row = (session.mods || []).find((item) => (item.installId === installId || item.id === installId) && item.enabled !== false);
+    if (!row) continue;
+    if (row.version && print.version && row.version !== "UNKNOWN" && print.version !== "UNKNOWN" && row.version !== print.version) {
+      continue;
+    }
+    if (row.hash && print.hash && row.hash !== print.hash) continue;
+    return session;
+  }
+  return null;
+}
+
+function historyHasOtherVersion(db, mod) {
+  const print = require("./dllOwnership").fingerprint(mod);
+  const hist = db && db.history && print.installId ? db.history[print.installId] : null;
+  if (!hist || !print.version || print.version === "UNKNOWN") return false;
+  return Object.keys(hist).some((ver) => ver !== print.version && ver !== "UNKNOWN");
+}
+
+function lookupLive(db, mod = {}, dutyPath = "", catalog = null, extras = {}) {
+  const stored = evidenceStore.lookup(db, mod);
+  const duty = String(dutyPath || "").trim();
+  if (duty) {
+    const runtimeVerify = require("./runtimeVerify");
+    const session = matchingSession(extras.sessions, mod);
+    const logFiles = collectLogFiles(session, duty);
+    const log = dutyLogScan.joinLogFiles(logFiles);
+    if (log) {
+      const verdict = runtimeVerify.evaluate(mod, {
+        logText: log,
+        logFiles,
+        catalog,
+        dataDir: extras.dataDir,
+        mods: extras.mods,
+        session,
+      });
+      const storedRow = (db && db.mods && (db.mods[mod.id || mod.installId] || null)) || null;
+      const versionShift =
+        storedRow &&
+        storedRow.version &&
+        mod.version &&
+        storedRow.version !== "UNKNOWN" &&
+        mod.version !== "UNKNOWN" &&
+        storedRow.version !== mod.version;
+      const stale = !session && verdict.tier !== "USER_OVERRIDE" && (historyHasOtherVersion(db, mod) || versionShift);
+      if (!stale && verdict.status === "FAILED") {
+        return {
+          status: "FAILED",
+          kind: verdict.kind,
+          evidence: verdict.evidence,
+          source: "LOCAL_VERIFIED_DATA",
+          confidence: verdict.confidence,
+          ruleTier: verdict.tier,
+        };
+      }
+      if (!stale && verdict.status === "WORKING") {
+        return {
+          status: "WORKED",
+          kind: verdict.kind,
+          evidence: verdict.evidence || "This install loaded in a local Duty session.",
+          source: "LOCAL_VERIFIED_DATA",
+          confidence: verdict.confidence,
+          ruleTier: verdict.tier,
+        };
+      }
+    }
+  }
+  return stored;
+}
+
 module.exports = {
   LIBRARY_DLLS,
   identities,
   assessLog,
   readSessionLogs,
+  collectLogFiles,
   recordFromSession,
   adoptFromSessions,
+  lookupLive,
   loadEvidence: evidenceStore.load,
   lookup: evidenceStore.lookup,
   getEvidence: evidenceStore.getEvidence,

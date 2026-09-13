@@ -360,7 +360,11 @@ function scanOverlays(deps) {
   return [
     { name: "NVIDIA Overlay", running: Boolean(status.nvidiaOverlay), source: "PROCESS" },
     { name: "NVIDIA Share", running: Boolean(status.nvidiaShare), source: "PROCESS" },
-    { name: "Razer Cortex", running: cortexRunning, source: "PROCESS" },
+    { name: "Discord", running: Boolean(status.discord), source: "PROCESS" },
+    { name: "Steam overlay", running: Boolean(status.steamOverlay), source: "PROCESS" },
+    { name: "RTSS", running: Boolean(status.rtss), source: "PROCESS" },
+    { name: "MSI Afterburner", running: Boolean(status.afterburner), source: "PROCESS" },
+    { name: "Razer Cortex", running: Boolean(status.razerCortex) || cortexRunning, source: "PROCESS" },
   ];
 }
 

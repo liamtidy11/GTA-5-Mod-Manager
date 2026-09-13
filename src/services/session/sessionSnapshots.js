@@ -69,6 +69,7 @@ function captureMods(dataDir, dutyPath) {
       canonicalModId: mod.canonicalModId || null,
       name: mod.name || mod.displayName || "Mod",
       version: mod.version || "UNKNOWN",
+      hash: mod.sourceArchiveHash || (mod.files && mod.files[0] && mod.files[0].hash) || "",
       enabled: mod.enabled !== false,
       compatibility: mod.compatibilityStatus || mod.compatibility || "UNKNOWN",
       health: mod.cardHealth || mod.managedStatus || "UNKNOWN",

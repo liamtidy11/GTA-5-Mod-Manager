@@ -5,6 +5,7 @@ const backupManager = require("./backupManager");
 const { hasStoredFile } = require("./payloadStore");
 const { validateManifest } = require("./manifestValidate");
 const { isConfigFile } = require("./configPolicy");
+const pluginSupportLayout = require("./knowledge/pluginSupportLayout");
 
 function diagnoseManagedMod(manifest, { dutyPath, dataDir } = {}) {
   const checked = validateManifest(manifest);
@@ -25,7 +26,7 @@ function diagnoseManagedMod(manifest, { dutyPath, dataDir } = {}) {
       issues.push({ code: "UNSAFE_DESTINATION", message: `Unsafe destination ${dest}` });
       continue;
     }
-    const present = exists(destAbs);
+    const present = exists(destAbs) || pluginSupportLayout.destPresentOnDuty(dutyPath, dest);
     if (!present && checked.manifest.enabled !== false) {
       issues.push({ code: "MISSING_MANAGED_FILE", message: `Manifest lists ${dest}, but the file is missing.`, file: dest });
     }
